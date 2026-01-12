@@ -98,6 +98,25 @@ export type Mention = {
 
 export type Mentions = Mention[];
 
+export interface FetchMessageHistoryOptions {
+  /** JID do chat (ex: 5511999999999@s.whatsapp.net ou apenas o número) */
+  jid: string;
+  /** Quantidade de mensagens a buscar (padrão: 50) */
+  count?: number;
+  /** ID da mensagem mais antiga conhecida (para paginação) */
+  oldestMessageId?: string;
+  /** Timestamp da mensagem mais antiga conhecida (para paginação) */
+  oldestMessageTimestamp?: number;
+  /** Se deve reprocessar as mensagens emitindo eventos (padrão: false) */
+  reprocess?: boolean;
+}
+
+export interface FetchMessageHistoryResult {
+  success: boolean;
+  requestId?: string;
+  message: string;
+}
+
 export type WhatsAppMention = { id: string; tag?: string };
 
 export interface WhatsappTemplate {}

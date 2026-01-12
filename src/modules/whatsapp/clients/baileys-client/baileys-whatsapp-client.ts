@@ -3,14 +3,15 @@ import ProcessingLogger from "../../../../utils/processing-logger";
 import type DataClient from "../../../data/data-client";
 import WppEventEmitter from "../../../events/emitter/emitter";
 import type MessageDto from "../../types";
-import type { EditMessageOptions, SendMessageOptions } from "../../types";
+import type { EditMessageOptions, FetchMessageHistoryOptions, FetchMessageHistoryResult, SendMessageOptions } from "../../types";
 import WhatsappClient from "../whatsapp-client";
 import handleConnectionUpdate from "./handle-connection-update";
+import handleEditMessage from "./handle-edit-message";
+import handleFetchMessageHistory, { reprocessHistoryMessages } from "./handle-fetch-message-history";
 import handleMessageUpdate from "./handle-message-update";
 import handleMessageUpsert from "./handle-message-upsert";
 import handleSendMessage from "./handle-send-message";
 import makeNewSocket from "./make-new-socket";
-import handleEditMessage from "./handle-edit-message";
 
 class BaileysWhatsappClient implements WhatsappClient {
   public _phone: string = "";
@@ -79,21 +80,24 @@ class BaileysWhatsappClient implements WhatsappClient {
     }
   }
 
-  private async onHistorySet({ messages }: { messages: WAMessage[] }) {
+  private async onHistorySet({ messages, isLatest }: { messages: WAMessage[]; isLatest?: boolean }) {
     const processId = `history-set-${Date.now()}`;
-    const logger = this.getLogger("History Set", processId, { messageCount: messages.length }, true);
+    const logger = this.getLogger("History Set", processId, { messageCount: messages.length, isLatest }, true);
     try {
-      logger.log(`Received messaging history set`, { messageCount: messages.length });
+      logger.log(`Received messaging history set`, { messageCount: messages.length, isLatest });
 
+      // Salvar mensagens raw no storage
       for (const message of messages) {
         if (message.message) {
           logger?.log("Saving raw message from history", { messageId: message.key?.id });
-
           await this._storage.saveRawMessage(this.sessionId, message.message, message.key);
         }
       }
 
-      logger.success({ savedMessages: messages.length });
+      // Reprocessar mensagens (emitir eventos)
+      const processedMessages = await reprocessHistoryMessages(this, messages, logger);
+
+      logger.success({ savedMessages: messages.length, processedMessages: processedMessages.length });
     } catch (error) {
       logger.failed(error);
     }
@@ -123,6 +127,17 @@ class BaileysWhatsappClient implements WhatsappClient {
     const logger = this.getLogger("Edit Message", processId, { props });
     try {
       return await handleEditMessage({ client: this, options: props, logger });
+    } catch (error) {
+      logger.failed(error);
+      throw error;
+    }
+  }
+
+  public async fetchMessageHistory(options: FetchMessageHistoryOptions): Promise<FetchMessageHistoryResult> {
+    const processId = `fetch-history-${Date.now()}`;
+    const logger = this.getLogger("Fetch Message History", processId, { options });
+    try {
+      return await handleFetchMessageHistory({ client: this, options, logger });
     } catch (error) {
       logger.failed(error);
       throw error;
