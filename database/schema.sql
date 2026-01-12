@@ -1,5 +1,5 @@
--- Schema para a tabela raw_messages
-CREATE TABLE IF NOT EXISTS raw_messages (
+-- Schema para a tabela messages
+CREATE TABLE IF NOT EXISTS messages (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     session_id VARCHAR(255) NOT NULL,
     remote_jid VARCHAR(255),
@@ -7,12 +7,19 @@ CREATE TABLE IF NOT EXISTS raw_messages (
     from_me BOOLEAN DEFAULT FALSE,
     key_data LONGTEXT NOT NULL,
     message_data LONGTEXT NOT NULL,
+    processing_status ENUM('processing', 'success', 'failed') NOT NULL DEFAULT 'processing',
+    parsed_message LONGTEXT NULL,
+    is_parsed BOOLEAN NOT NULL DEFAULT FALSE,
+    is_emitted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY unique_message (session_id, remote_jid, message_id, from_me),
     INDEX idx_session_id (session_id),
     INDEX idx_remote_jid (remote_jid),
-    INDEX idx_created_at (created_at)
+    INDEX idx_created_at (created_at),
+    INDEX idx_processing_status (processing_status),
+    INDEX idx_is_parsed (is_parsed),
+    INDEX idx_is_emitted (is_emitted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Schema para a tabela processing_logs

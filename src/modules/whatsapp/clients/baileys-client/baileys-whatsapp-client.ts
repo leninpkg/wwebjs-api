@@ -89,8 +89,12 @@ class BaileysWhatsappClient implements WhatsappClient {
       // Salvar mensagens raw no storage
       for (const message of messages) {
         if (message.message) {
-          logger?.log("Saving raw message from history", { messageId: message.key?.id });
-          await this._storage.saveRawMessage(this.sessionId, message.message, message.key);
+          logger?.log("Saving message from history", { messageId: message.key?.id });
+          await this._storage.saveMessage({
+            sessionId: this.sessionId,
+            message: message.message,
+            key: message.key,
+          });
         }
       }
 

@@ -8,15 +8,16 @@ import {
 } from "baileys";
 import type { ILogger } from "baileys/lib/Utils/logger.js";
 import { useMySQLAuthState } from "mysql-baileys";
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
 import { createPool } from "mysql2/promise";
-import type DataClient from "./data-client.js";
+import DataClient from "./data-client.js";
+import type { SaveMessageOptions, UpdateMessageOptions } from "./data-client.js";
 import { Logger } from "@in.pulse-crm/utils";
-import { FullRawMessage, FullRawMessageJson } from "../whatsapp/clients/baileys-client/types.js";
+import { Message, MessageJson } from "../whatsapp/clients/baileys-client/types.js";
 
 type MySQLAuthState = Awaited<ReturnType<typeof useMySQLAuthState>>;
 
-class MySQLDataClient implements DataClient {
+class MySQLDataClient extends DataClient {
   private pool: Pool;
   private mysqlAuthStateMap: Map<string, MySQLAuthState> = new Map();
 
@@ -27,6 +28,7 @@ class MySQLDataClient implements DataClient {
     private password: string,
     private database: string,
   ) {
+    super();
     this.pool = createPool({
       host: this.host,
       port: this.port,
@@ -67,17 +69,18 @@ class MySQLDataClient implements DataClient {
     return undefined;
   }
 
-  public async getFullRawMessage(sessionId: string, messageId: string): Promise<FullRawMessage | null> {
+  public async getMessage(sessionId: string, messageId: string): Promise<Message | null> {
     try {
-      const query = "SELECT * FROM raw_messages WHERE id = ? AND session_id = ?";
+      const query = "SELECT * FROM messages WHERE id = ? AND session_id = ?";
       const [rows] = await this.pool.query<RowDataPacket[]>(query, [messageId, sessionId]);
 
       if (rows[0]) {
-        const resultJson = rows[0] as FullRawMessageJson;
-        const resultParsed: FullRawMessage = {
+        const resultJson = rows[0] as MessageJson;
+        const resultParsed: Message = {
           ...resultJson,
           message_data: JSON.parse(resultJson.message_data) as proto.IMessage,
           key_data: JSON.parse(resultJson.key_data) as proto.IMessageKey,
+          parsed_message: resultJson.parsed_message ? JSON.parse(resultJson.parsed_message) : null,
           created_at: new Date(resultJson.created_at),
           updated_at: new Date(resultJson.updated_at),
         };
@@ -96,26 +99,71 @@ class MySQLDataClient implements DataClient {
       if (!key.id) {
         return undefined;
       }
-      const findMessage = await this.getFullRawMessage(sessionId, key.id!);
+      const findMessage = await this.getMessage(sessionId, key.id!);
       return findMessage?.message_data;
     } catch (error: any) {
       return undefined;
     }
   }
 
-  public async saveRawMessage(sessionId: string, message: proto.IMessage, key: WAMessageKey): Promise<void> {
+  public async saveMessage({ sessionId, message, key }: SaveMessageOptions): Promise<number | null> {
     try {
       const query = `
-        INSERT INTO raw_messages (session_id, remote_jid, message_id, message_data, key_data, created_at)
-        VALUES (?, ?, ?, ?, ?, NOW())
+        INSERT INTO messages (session_id, remote_jid, message_id, message_data, key_data, processing_status, is_parsed, is_emitted, created_at)
+        VALUES (?, ?, ?, ?, ?, 'processing', FALSE, FALSE, NOW())
         ON DUPLICATE KEY UPDATE
           message_data = VALUES(message_data),
           updated_at = NOW()
       `;
 
-      await this.pool.query(query, [sessionId, key.remoteJid, key.id, JSON.stringify(message), JSON.stringify(key)]);
+      const [result] = await this.pool.query<ResultSetHeader>(query, [
+        sessionId,
+        key.remoteJid,
+        key.id,
+        JSON.stringify(message),
+        JSON.stringify(key),
+      ]);
+
+      return result.insertId || null;
     } catch (error: any) {
-      Logger.error("Error saving raw message", error);
+      Logger.error("Error saving message", error);
+      return null;
+    }
+  }
+
+  public async updateMessage({ sessionId, messageId, parsedMessage, isParsed, isEmitted, processingStatus }: UpdateMessageOptions): Promise<void> {
+    try {
+      const updates: string[] = [];
+      const params: any[] = [];
+
+      if (parsedMessage !== undefined) {
+        updates.push("parsed_message = ?");
+        params.push(JSON.stringify(parsedMessage));
+      }
+      if (isParsed !== undefined) {
+        updates.push("is_parsed = ?");
+        params.push(isParsed);
+      }
+      if (isEmitted !== undefined) {
+        updates.push("is_emitted = ?");
+        params.push(isEmitted);
+      }
+      if (processingStatus !== undefined) {
+        updates.push("processing_status = ?");
+        params.push(processingStatus);
+      }
+
+      if (updates.length === 0) {
+        return;
+      }
+
+      updates.push("updated_at = NOW()");
+      params.push(messageId, sessionId);
+
+      const query = `UPDATE messages SET ${updates.join(", ")} WHERE message_id = ? AND session_id = ?`;
+      await this.pool.query(query, params);
+    } catch (error: any) {
+      Logger.error("Error updating message", error);
     }
   }
 

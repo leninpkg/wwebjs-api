@@ -1,5 +1,4 @@
 import { MessageUpsertType, WAMessage } from "baileys";
-
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import parseMessage from "./parse-message";
@@ -39,26 +38,59 @@ async function handleMessageUpsert({ messages, type, client, logger }: MessageUp
     }
 
     if (message.message) {
-      logger.log("Saving raw message to storage", { messageId: message.key?.id });
-      await client._storage.saveRawMessage(client.sessionId, message.message, message.key);
+      logger.log("Saving message to storage", { messageId: message.key?.id });
+      await client._storage.saveMessage({
+        sessionId: client.sessionId,
+        message: message.message,
+        key: message.key,
+      });
 
       logger.log("Processing incoming message", { messageId: message.key?.id });
 
-      const parsedMessage = await parseMessage({
-        message,
-        instance: client.instance,
-        clientId: client.clientId,
-        phone: client.phone,
-        logger,
-      });
+      try {
+        const parsedMessage = await parseMessage({
+          message,
+          instance: client.instance,
+          clientId: client.clientId,
+          phone: client.phone,
+          logger,
+        });
 
-      logger.log("Message parsed successfully", { parsedMessage });
-      client._ev.emit({
-        type: "message-received",
-        clientId: client.clientId,
-        message: parsedMessage,
-      });
-      logger.log("Emitted message-received event", { messageId: message.key?.id });
+        logger.log("Message parsed successfully", { parsedMessage });
+
+        // Update message with parsed data
+        await client._storage.updateMessage({
+          sessionId: client.sessionId,
+          messageId: message.key.id!,
+          parsedMessage,
+          isParsed: true,
+        });
+
+        client._ev.emit({
+          type: "message-received",
+          clientId: client.clientId,
+          message: parsedMessage,
+        });
+
+        // Update message as emitted and success
+        await client._storage.updateMessage({
+          sessionId: client.sessionId,
+          messageId: message.key.id!,
+          isEmitted: true,
+          processingStatus: "success",
+        });
+
+        logger.log("Emitted message-received event", { messageId: message.key?.id });
+      } catch (error) {
+        logger.log("Failed to process message", { messageId: message.key?.id, error });
+
+        // Update message as failed
+        await client._storage.updateMessage({
+          sessionId: client.sessionId,
+          messageId: message.key.id!,
+          processingStatus: "failed",
+        });
+      }
     }
   }
 
