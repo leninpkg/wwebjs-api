@@ -1,4 +1,5 @@
 import makeWASocket, { MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
+import "dotenv/config";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import type DataClient from "../../../data/data-client";
 import WppEventEmitter from "../../../events/emitter/emitter";
@@ -12,6 +13,12 @@ import handleMessageUpdate from "./handle-message-update";
 import handleMessageUpsert from "./handle-message-upsert";
 import handleSendMessage from "./handle-send-message";
 import makeNewSocket from "./make-new-socket";
+
+// Data mínima para sincronização de histórico (formato: YYYY-MM-DD ou timestamp em segundos)
+// Mensagens anteriores a esta data serão ignoradas
+const HISTORY_MIN_DATE = process.env["HISTORY_MIN_DATE"]
+  ? new Date(process.env["HISTORY_MIN_DATE"]).getTime() / 1000
+  : null;
 
 class BaileysWhatsappClient implements WhatsappClient {
   public _phone: string = "";
@@ -92,10 +99,29 @@ class BaileysWhatsappClient implements WhatsappClient {
 
       let savedCount = 0;
       let skippedCount = 0;
+      let skippedByDateCount = 0;
+
+      // Calcular a data mínima para filtrar mensagens
+      // Usar a mais recente entre HISTORY_MIN_DATE e lastSyncAt
+      const lastSyncAtTimestamp = lastSyncAt ? lastSyncAt.getTime() / 1000 : null;
+      const minTimestamp = Math.max(HISTORY_MIN_DATE || 0, lastSyncAtTimestamp || 0) || null;
+
+      logger.log("Filtering messages", { minTimestamp, HISTORY_MIN_DATE, lastSyncAtTimestamp });
 
       // Salvar mensagens no storage (apenas novas)
       for (const message of messages) {
         if (message.message && message.key.id) {
+          // Filtrar mensagens anteriores à data mínima (HISTORY_MIN_DATE ou lastSyncAt)
+          if (minTimestamp && message.messageTimestamp) {
+            const messageTimestamp = typeof message.messageTimestamp === "number"
+              ? message.messageTimestamp
+              : Number(message.messageTimestamp);
+            if (messageTimestamp < minTimestamp) {
+              skippedByDateCount++;
+              continue;
+            }
+          }
+
           // Check if message already exists in database
           const exists = await this._storage.messageExists(this.sessionId, message.key.id);
           if (exists) {
@@ -122,7 +148,7 @@ class BaileysWhatsappClient implements WhatsappClient {
       await this._storage.updateLastSyncAt(this.sessionId);
       logger.log("Last sync date updated");
 
-      logger.success({ savedMessages: savedCount, skippedMessages: skippedCount, processedMessages: processedMessages.length });
+      logger.success({ savedMessages: savedCount, skippedMessages: skippedCount, skippedByDate: skippedByDateCount, processedMessages: processedMessages.length });
     } catch (error) {
       logger.failed(error);
     }
