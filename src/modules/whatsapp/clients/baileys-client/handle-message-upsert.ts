@@ -2,6 +2,9 @@ import { MessageUpsertType, WAMessage } from "baileys";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import parseMessage from "./parse-message";
+import "dotenv/config";
+
+const IGNORE_GROUP_MESSAGES = process.env["IGNORE_GROUP_MESSAGES"] === "true";
 
 interface MessageUpsertContext {
   client: BaileysWhatsappClient;
@@ -34,6 +37,12 @@ async function handleMessageUpsert({ messages, type, client, logger }: MessageUp
     // Ignorar mensagens de status (status@broadcast)
     if (message.key.remoteJid === "status@broadcast") {
       logger.log("Skipping status message", { messageId: message.key?.id });
+      continue;
+    }
+
+    // Ignorar mensagens de grupo (terminam com @g.us) se configurado
+    if (IGNORE_GROUP_MESSAGES && message.key.remoteJid?.endsWith("@g.us")) {
+      logger.log("Skipping group message (disabled by env)", { messageId: message.key?.id });
       continue;
     }
 
