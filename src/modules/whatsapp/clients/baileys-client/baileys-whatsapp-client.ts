@@ -86,22 +86,43 @@ class BaileysWhatsappClient implements WhatsappClient {
     try {
       logger.log(`Received messaging history set`, { messageCount: messages.length, isLatest });
 
-      // Salvar mensagens raw no storage
+      // Get last sync date to avoid reprocessing
+      const lastSyncAt = await this._storage.getLastSyncAt(this.sessionId);
+      logger.log("Last sync date retrieved", { lastSyncAt });
+
+      let savedCount = 0;
+      let skippedCount = 0;
+
+      // Salvar mensagens no storage (apenas novas)
       for (const message of messages) {
-        if (message.message) {
+        if (message.message && message.key.id) {
+          // Check if message already exists in database
+          const exists = await this._storage.messageExists(this.sessionId, message.key.id);
+          if (exists) {
+            skippedCount++;
+            continue;
+          }
+
           logger?.log("Saving message from history", { messageId: message.key?.id });
           await this._storage.saveMessage({
             sessionId: this.sessionId,
             message: message.message,
             key: message.key,
           });
+          savedCount++;
         }
       }
+
+      logger.log("Messages saved", { savedCount, skippedCount });
 
       // Reprocessar mensagens (emitir eventos)
       const processedMessages = await reprocessHistoryMessages(this, messages, logger);
 
-      logger.success({ savedMessages: messages.length, processedMessages: processedMessages.length });
+      // Update last sync date
+      await this._storage.updateLastSyncAt(this.sessionId);
+      logger.log("Last sync date updated");
+
+      logger.success({ savedMessages: savedCount, skippedMessages: skippedCount, processedMessages: processedMessages.length });
     } catch (error) {
       logger.failed(error);
     }

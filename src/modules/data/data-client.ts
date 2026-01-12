@@ -21,8 +21,11 @@ abstract class DataClient {
   public abstract getGroupMetadata(sessionId: string, jid: string): Promise<GroupMetadata | undefined>;
   public abstract getRawMessage(sessionId: string, key: WAMessageKey): Promise<proto.IMessage | undefined>;
   public abstract getMessage(sessionId: string, messageId: string): Promise<Message | null>;
+  public abstract messageExists(sessionId: string, messageId: string): Promise<boolean>;
   public abstract saveMessage(options: SaveMessageOptions): Promise<number | null>;
   public abstract updateMessage(options: UpdateMessageOptions): Promise<void>;
+  public abstract getLastSyncAt(sessionId: string): Promise<Date | null>;
+  public abstract updateLastSyncAt(sessionId: string): Promise<void>;
   public abstract getAuthState(sessionId: string): Promise<AuthenticationState>;
   public abstract saveAuthState(sessionId: string): Promise<void>;
   public abstract clearAuthState(sessionId: string): Promise<void>;

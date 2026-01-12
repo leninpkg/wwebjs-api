@@ -106,6 +106,17 @@ class MySQLDataClient extends DataClient {
     }
   }
 
+  public async messageExists(sessionId: string, messageId: string): Promise<boolean> {
+    try {
+      const query = "SELECT 1 FROM messages WHERE message_id = ? AND session_id = ? LIMIT 1";
+      const [rows] = await this.pool.query<RowDataPacket[]>(query, [messageId, sessionId]);
+      return rows.length > 0;
+    } catch (error: any) {
+      Logger.error("Error checking if message exists", error);
+      return false;
+    }
+  }
+
   public async saveMessage({ sessionId, message, key }: SaveMessageOptions): Promise<number | null> {
     try {
       const query = `
@@ -184,6 +195,37 @@ class MySQLDataClient extends DataClient {
 
     await clear();
     await removeCreds();
+  }
+
+  public async getLastSyncAt(sessionId: string): Promise<Date | null> {
+    try {
+      const query = "SELECT last_sync_at FROM session_sync WHERE session_id = ?";
+      const [rows] = await this.pool.query<RowDataPacket[]>(query, [sessionId]);
+
+      if (rows[0]) {
+        return new Date(rows[0]["last_sync_at"]);
+      }
+
+      return null;
+    } catch (error: any) {
+      Logger.error("Error getting last sync date", error);
+      return null;
+    }
+  }
+
+  public async updateLastSyncAt(sessionId: string): Promise<void> {
+    try {
+      const query = `
+        INSERT INTO session_sync (session_id, last_sync_at)
+        VALUES (?, NOW())
+        ON DUPLICATE KEY UPDATE
+          last_sync_at = NOW(),
+          updated_at = NOW()
+      `;
+      await this.pool.query(query, [sessionId]);
+    } catch (error: any) {
+      Logger.error("Error updating last sync date", error);
+    }
   }
 
   public async unsafeQuery<T>(query: string, params?: any[]): Promise<T[]> {
