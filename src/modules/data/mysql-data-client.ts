@@ -6,14 +6,14 @@ import {
   type SignalKeyStore,
   type WAMessageKey,
 } from "baileys";
-import type { ILogger } from "baileys/lib/Utils/logger.js";
+import type { ILogger } from "baileys/lib/Utils/logger";
 import { useMySQLAuthState } from "mysql-baileys";
 import type { Pool, RowDataPacket, ResultSetHeader } from "mysql2/promise";
 import { createPool } from "mysql2/promise";
-import DataClient from "./data-client.js";
-import type { SaveMessageOptions, UpdateMessageOptions } from "./data-client.js";
+import DataClient from "./data-client";
+import type { SaveMessageOptions, UpdateMessageOptions } from "./data-client";
 import { Logger } from "@in.pulse-crm/utils";
-import { Message, MessageJson } from "../whatsapp/clients/baileys-client/types.js";
+import { Message, MessageJson } from "../whatsapp/clients/baileys-client/types";
 
 type MySQLAuthState = Awaited<ReturnType<typeof useMySQLAuthState>>;
 

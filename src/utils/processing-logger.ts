@@ -75,14 +75,14 @@ export default class ProcessingLogger {
 
       // Salvar log principal na tabela processing_logs
       const mainLogQuery = `
-        INSERT INTO processing_logs (
+        INSERT INTO logs (
           instance,
           process_name,
           process_id,
           start_time,
           end_time,
           duration_ms,
-          log_entries,
+          logs_entries,
           input,
           output,
           has_error,
@@ -108,11 +108,11 @@ export default class ProcessingLogger {
 
       const mainLogId = (result as any).insertId;
 
-      // Salvar cada entrada de log individual na tabela log_entries
+      // Salvar cada entrada de log individual na tabela logs_entries
       for (const entry of this.logEntries) {
         const entryQuery = `
-          INSERT INTO log_entries (
-            processing_log_id,
+          INSERT INTO logs_entries (
+            log_id,
             process_id,
             log_message,
             log_level,
