@@ -16,9 +16,11 @@ import makeNewSocket from "./make-new-socket";
 
 // Data mínima para sincronização de histórico (formato: YYYY-MM-DD ou timestamp em segundos)
 // Mensagens anteriores a esta data serão ignoradas
+const sevenDaysAgo = new Date();
+sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 const HISTORY_MIN_DATE = process.env["HISTORY_MIN_DATE"]
   ? new Date(process.env["HISTORY_MIN_DATE"]).getTime() / 1000
-  : null;
+  : sevenDaysAgo.getTime() / 1000;
 
 class BaileysWhatsappClient implements WhatsappClient {
   public _phone: string = "";
@@ -30,7 +32,7 @@ class BaileysWhatsappClient implements WhatsappClient {
     public _storage: DataClient,
     public _sock: ReturnType<typeof makeWASocket>,
     public _ev: WppEventEmitter,
-  ) {}
+  ) { }
 
   public static async build(
     sessionId: string,
