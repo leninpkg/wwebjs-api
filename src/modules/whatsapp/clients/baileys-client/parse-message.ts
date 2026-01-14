@@ -5,6 +5,7 @@ import filesService from "../../../files/files.service";
 import MessageDto from "../../types";
 
 type MessageType = "chat" | "image" | "video" | "audio" | "document" | "sticker" | "unsupported";
+
 interface ParseMessageParams {
   message: WAMessage;
   instance: string;

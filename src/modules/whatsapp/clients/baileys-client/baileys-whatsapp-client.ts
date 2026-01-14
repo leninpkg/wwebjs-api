@@ -8,19 +8,12 @@ import type { EditMessageOptions, FetchMessageHistoryOptions, FetchMessageHistor
 import WhatsappClient from "../whatsapp-client";
 import handleConnectionUpdate from "./handle-connection-update";
 import handleEditMessage from "./handle-edit-message";
-import handleFetchMessageHistory, { reprocessHistoryMessages } from "./handle-fetch-message-history";
+import handleFetchMessageHistory from "./handle-fetch-message-history";
+import handleHistorySet from "./handle-history-set";
 import handleMessageUpdate from "./handle-message-update";
 import handleMessageUpsert from "./handle-message-upsert";
 import handleSendMessage from "./handle-send-message";
 import makeNewSocket from "./make-new-socket";
-
-// Data mínima para sincronização de histórico (formato: YYYY-MM-DD ou timestamp em segundos)
-// Mensagens anteriores a esta data serão ignoradas
-const sevenDaysAgo = new Date();
-sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-const HISTORY_MIN_DATE = process.env["HISTORY_MIN_DATE"]
-  ? new Date(process.env["HISTORY_MIN_DATE"]).getTime() / 1000
-  : sevenDaysAgo.getTime() / 1000;
 
 class BaileysWhatsappClient implements WhatsappClient {
   public _phone: string = "";
@@ -93,64 +86,7 @@ class BaileysWhatsappClient implements WhatsappClient {
     const processId = `history-set-${Date.now()}`;
     const logger = this.getLogger("History Set", processId, { messageCount: messages.length, isLatest }, true);
     try {
-      logger.log(`Received messaging history set`, { messageCount: messages.length, isLatest });
-
-      // Get last sync date to avoid reprocessing
-      const lastSyncAt = await this._storage.getLastSyncAt(this.sessionId);
-      logger.log("Last sync date retrieved", { lastSyncAt });
-
-      let savedCount = 0;
-      let skippedCount = 0;
-      let skippedByDateCount = 0;
-
-      // Calcular a data mínima para filtrar mensagens
-      // Usar a mais recente entre HISTORY_MIN_DATE e lastSyncAt
-      const lastSyncAtTimestamp = lastSyncAt ? lastSyncAt.getTime() / 1000 : null;
-      const minTimestamp = Math.max(HISTORY_MIN_DATE || 0, lastSyncAtTimestamp || 0) || null;
-
-      logger.log("Filtering messages", { minTimestamp, HISTORY_MIN_DATE, lastSyncAtTimestamp });
-
-      // Salvar mensagens no storage (apenas novas)
-      for (const message of messages) {
-        if (message.message && message.key.id) {
-          // Filtrar mensagens anteriores à data mínima (HISTORY_MIN_DATE ou lastSyncAt)
-          if (minTimestamp && message.messageTimestamp) {
-            const messageTimestamp = typeof message.messageTimestamp === "number"
-              ? message.messageTimestamp
-              : Number(message.messageTimestamp);
-            if (messageTimestamp < minTimestamp) {
-              skippedByDateCount++;
-              continue;
-            }
-          }
-
-          // Check if message already exists in database
-          const exists = await this._storage.messageExists(this.sessionId, message.key.id);
-          if (exists) {
-            skippedCount++;
-            continue;
-          }
-
-          logger?.log("Saving message from history", { messageId: message.key?.id });
-          await this._storage.saveMessage({
-            sessionId: this.sessionId,
-            message: message.message,
-            key: message.key,
-          });
-          savedCount++;
-        }
-      }
-
-      logger.log("Messages saved", { savedCount, skippedCount });
-
-      // Reprocessar mensagens (emitir eventos)
-      const processedMessages = await reprocessHistoryMessages(this, messages, logger);
-
-      // Update last sync date
-      await this._storage.updateLastSyncAt(this.sessionId);
-      logger.log("Last sync date updated");
-
-      logger.success({ savedMessages: savedCount, skippedMessages: skippedCount, skippedByDate: skippedByDateCount, processedMessages: processedMessages.length });
+      await handleHistorySet({ client: this, messages, isLatest: !!isLatest, logger });
     } catch (error) {
       logger.failed(error);
     }
