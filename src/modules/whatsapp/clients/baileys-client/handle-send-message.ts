@@ -117,10 +117,15 @@ function getMessageOptions(options: SendMessageOptions, logger: ProcessingLogger
 }
 
 function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogger): AnyMediaMessageContent {
-  logger.debug(`Preparando opções de arquivo`, { fileType: options.fileType, fileName: options.fileName });
-  const isImage = options.fileType?.includes("image");
-  const isVideo = options.fileType?.includes("video");
-  const isAudio = options.fileType?.includes("audio");
+  // Extrair informações do arquivo do objeto file, se disponível
+  const fileName = options.fileName || options.file?.name || "file";
+  const mimeType = options.file?.mime_type || options.fileType || "application/octet-stream";
+
+  logger.debug(`Preparando opções de arquivo`, { fileType: options.fileType, fileName, mimeType });
+
+  const isImage = mimeType.includes("image") || options.fileType === "image";
+  const isVideo = mimeType.includes("video") || options.fileType === "video";
+  const isAudio = mimeType.includes("audio") || options.fileType === "audio";
 
   if (isImage) {
     logger.debug(`Criando mensagem de imagem`, { url: options.fileUrl });
@@ -144,13 +149,13 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
     };
   }
 
-  logger.debug(`Criando mensagem de documento`, { fileName: options.fileName, mimeType: options.fileType });
+  logger.debug(`Criando mensagem de documento`, { fileName, mimeType });
   return {
     document: {
       url: options.fileUrl,
     },
-    mimetype: options.fileType || "application/octet-stream",
-    fileName: options.fileName,
+    mimetype: mimeType,
+    fileName: fileName,
     ...(options.text ? { caption: options.text } : {}),
   };
 }
