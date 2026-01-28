@@ -44,7 +44,7 @@ async function handleHistorySet({
   const lastSyncAt = await client._storage.getLastSyncAt(client.sessionId);
   logger.log("Last sync date retrieved", { lastSyncAt });
 
-  const minTimestamp = calculateMinTimestamp(lastSyncAt);
+  const minTimestamp = HISTORY_MIN_DATE;
   logger.log("Filtering messages", { minTimestamp, HISTORY_MIN_DATE, lastSyncAt });
 
   const { savedCount, skippedCount, skippedByDateCount } = await saveNewMessages({
@@ -74,11 +74,6 @@ async function handleHistorySet({
     skippedByDateCount,
     processedCount: processedMessages.length,
   };
-}
-
-function calculateMinTimestamp(lastSyncAt: Date | null): number | null {
-  const lastSyncAtTimestamp = lastSyncAt ? lastSyncAt.getTime() / 1000 : null;
-  return Math.max(HISTORY_MIN_DATE || 0, lastSyncAtTimestamp || 0) || null;
 }
 
 interface SaveMessagesContext {
