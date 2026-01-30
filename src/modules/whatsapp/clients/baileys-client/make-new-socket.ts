@@ -1,6 +1,6 @@
 import { ILogger } from "baileys/lib/Utils/logger";
 import DataClient from "../../../data/data-client";
-import makeWASocket, { Browsers, makeCacheableSignalKeyStore } from "baileys";
+import makeWASocket, { Browsers } from "baileys";
 
 const BAILEYS_LOGS_LEVEL = process.env["BAILEYS_LOGS_LEVEL"] || "warn";
 
