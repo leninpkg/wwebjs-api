@@ -37,6 +37,9 @@ export default interface MessageDto {
   fileType?: null | string;
   fileSize?: null | string;
   isForwarded?: false | boolean;
+  isGroup: boolean;
+  authorName?: null | string;
+  groupId?: null | string;
   clientId: number | null;
 }
 
@@ -119,4 +122,4 @@ export interface FetchMessageHistoryResult {
 
 export type WhatsAppMention = { id: string; tag?: string };
 
-export interface WhatsappTemplate {}
+export interface WhatsappTemplate { }

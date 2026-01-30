@@ -2,18 +2,32 @@ import { ILogger } from "baileys/lib/Utils/logger";
 import DataClient from "../../../data/data-client";
 import makeWASocket, { Browsers, makeCacheableSignalKeyStore } from "baileys";
 
+const BAILEYS_LOGS_LEVEL = process.env["BAILEYS_LOGS_LEVEL"] || "warn";
+
 async function makeNewSocket(id: string, storage: DataClient) {
   const logger: ILogger = {
     level: "info",
-    error: (msg) => console.log(`[ERROR]`, msg),
-    warn: (msg) => console.log(`[WARN]`, msg),
-    info: (msg) => console.log(`[INFO]`, msg),
+    error: (msg) => {
+      if (["error", "warn", "info", "debug", "trace"].includes(BAILEYS_LOGS_LEVEL)) {
+        console.log(`[ERROR]`, msg);
+      }
+    },
+    warn: (msg) => {
+      if (["warn", "info", "debug", "trace"].includes(BAILEYS_LOGS_LEVEL)) {
+        console.log(`[WARN]`, msg);
+      }
+    },
+    info: (msg) => {
+      if (["info", "debug", "trace"].includes(BAILEYS_LOGS_LEVEL)) {
+        console.log(`[INFO]`, msg);
+      }
+    },
     child: (msg) => {
       console.log(`[CHILD LOGGER]`, msg);
       return logger;
     },
-    debug: () => {},
-    trace: () => {},
+    debug: () => { },
+    trace: () => { },
   };
 
   const authState = await storage.getAuthState(id);

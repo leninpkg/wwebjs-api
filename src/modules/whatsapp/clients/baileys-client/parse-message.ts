@@ -34,34 +34,37 @@ interface FileMessageContent extends MessageContent {
 }
 
 async function parseMessage({ message, instance, clientId, phone, logger }: ParseMessageParams): Promise<MessageDto> {
-  logger.debug("Parsing message", message);
+  logger.log("Parsing message", message);
   const { isFile, contactName, quotedMessageId, ...content } = getMessageContent(message, logger);
 
   const isFromMe = message.key.fromMe;
 
-  logger.debug("Verifying message sender info");
-  const remotePhone = getMessageFrom(message.key);
-  logger.debug("Message sender phone", remotePhone);
-  logger.debug("Verifying if message is forwarded");
+  logger.log("Verifying message sender info");
+  const from = getMessageFrom(message.key);
+  logger.log("Message sender phone", from);
+  logger.log("Verifying if message is forwarded");
   const isForwarded = getIsForwarded(message);
-  logger.debug("Is message forwarded", isForwarded);
+  logger.log("Is message forwarded", isForwarded);
 
   const parsedMessage: MessageDto = {
     instance,
     clientId,
     wwebjsIdStanza: message.key.id || null,
-    from: isFromMe ? `me:${phone}` : remotePhone,
-    to: isFromMe ? remotePhone : `me:${phone}`,
+    from: isFromMe ? `me:${phone}` : from.phone,
+    to: isFromMe ? from.phone : `me:${phone}`,
     isForwarded,
+    isGroup: from.isGroup,
+    groupId: from.groupId || null,
     status: isFromMe ? "PENDING" : "RECEIVED",
+    authorName: contactName,
     ...content,
   };
-  logger.debug("Base parsed message", parsedMessage);
+  logger.log("Base parsed message", parsedMessage);
 
   if (isFile) {
-    logger.debug("Processing file message", { fileName: (content as FileMessageContent).fileName });
+    logger.log("Processing file message", { fileName: (content as FileMessageContent).fileName });
     const uploadedFile = await processMediaFile(instance, message, content as FileMessageContent, logger);
-    logger.debug("Uploaded file", uploadedFile);
+    logger.log("Uploaded file", uploadedFile);
     return { ...parsedMessage, fileId: uploadedFile.id };
   }
 
@@ -170,25 +173,33 @@ function getMessageContent(message: WAMessage, logger: ProcessingLogger): Messag
   };
 }
 
-function getMessageContactName(message: WAMessage): string {
+function getMessageContactName(message: WAMessage) {
   return message.verifiedBizName || message.pushName || message.key.remoteJid?.split("@")[0] || "";
 }
 
-function getMessageFrom(key: WAMessageKey): string {
+function getMessageFrom(key: WAMessageKey) {
   const isGroup = key.remoteJid?.includes("@g.us");
   const isLid = key.addressingMode === "lid";
+
   if (isGroup) {
     const participant = key.participant || "";
     const participantAlt = key.participantAlt || participant;
     const phone = isLid ? participantAlt.split("@")[0] : participant.split("@")[0];
 
-    return phone || key.participant || "";
+    return {
+      phone: phone || key.participant || "",
+      isGroup: true,
+      groupId: key.remoteJid?.replace("@g.us", "") || "",
+    };
   }
   const jid = key.remoteJid || "";
   const jidAlt = key.remoteJidAlt || jid;
   const phone = isLid ? jidAlt.split("@")[0] : jid.split("@")[0];
 
-  return phone || key.remoteJid || "";
+  return {
+    phone: phone || key.remoteJid || "",
+    isGroup: false,
+  };
 }
 
 function getIsForwarded(message: WAMessage): boolean {
