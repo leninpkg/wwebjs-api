@@ -36,7 +36,7 @@ async function makeNewSocket(id: string, storage: DataClient) {
     logger,
     auth: {
       creds: authState.creds,
-      keys: makeCacheableSignalKeyStore(signalStore, logger),
+      keys: signalStore,
     },
     browser: Browsers.windows("Google Chrome"),
     cachedGroupMetadata: async (jid) => storage.getGroupMetadata(id, jid),
