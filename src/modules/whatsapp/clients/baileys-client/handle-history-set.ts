@@ -2,6 +2,7 @@ import type { WAMessage } from "baileys";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import { reprocessHistoryMessages } from "./handle-fetch-message-history";
+import "dotenv/config";
 
 // Data mínima para sincronização de histórico
 const HISTORY_MIN_DATE = getHistoryMinDate();
