@@ -19,6 +19,7 @@ export interface UpdateMessageOptions {
 abstract class DataClient {
   public abstract getSignalKeyStore(sessionId: string): Promise<SignalKeyStore>;
   public abstract getGroupMetadata(sessionId: string, jid: string): Promise<GroupMetadata | undefined>;
+  public abstract saveGroupMetadata(sessionId: string, jid: string, metadata: GroupMetadata): Promise<void>;
   public abstract getRawMessage(sessionId: string, key: WAMessageKey): Promise<proto.IMessage | undefined>;
   public abstract getMessage(sessionId: string, messageId: string): Promise<Message | null>;
   public abstract messageExists(sessionId: string, messageId: string): Promise<boolean>;

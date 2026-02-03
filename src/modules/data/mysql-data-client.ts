@@ -59,14 +59,42 @@ class MySQLDataClient extends DataClient {
   }
 
   public async getGroupMetadata(sessionId: string, jid: string): Promise<GroupMetadata | undefined> {
-    const query = "SELECT data FROM group_metadata WHERE jid = ? AND session_id = ?";
-    const [rows] = await this.pool.query<RowDataPacket[]>(query, [jid, sessionId]);
+    try {
+      const query = "SELECT data FROM group_metadata WHERE jid = ? AND session_id = ?";
+      const [rows] = await this.pool.query<RowDataPacket[]>(query, [jid, sessionId]);
 
-    if (rows[0]) {
-      return JSON.parse(rows[0]["data"]) as GroupMetadata;
+      if (rows[0]) {
+        return JSON.parse(rows[0]["data"]) as GroupMetadata;
+      }
+
+      return undefined;
+    } catch (error: any) {
+      // Se a tabela não existe, retorna undefined (o Baileys vai buscar os dados do WhatsApp)
+      if (error.code === 'ER_NO_SUCH_TABLE') {
+        Logger.warn(`Table 'group_metadata' does not exist. Consider running migration 003_add_group_metadata_table.sql`);
+        return undefined;
+      }
+      Logger.error("Error fetching group metadata from MySQL", error);
+      return undefined;
     }
+  }
 
-    return undefined;
+  public async saveGroupMetadata(sessionId: string, jid: string, metadata: GroupMetadata): Promise<void> {
+    try {
+      const query = `
+        INSERT INTO group_metadata (session_id, jid, data, created_at)
+        VALUES (?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE
+          data = VALUES(data),
+          updated_at = NOW()
+      `;
+      await this.pool.query(query, [sessionId, jid, JSON.stringify(metadata)]);
+    } catch (error: any) {
+      // Se a tabela não existe, ignora silenciosamente
+      if (error.code !== 'ER_NO_SUCH_TABLE') {
+        Logger.error("Error saving group metadata to MySQL", error);
+      }
+    }
   }
 
   public async getMessage(sessionId: string, messageId: string): Promise<Message | null> {
