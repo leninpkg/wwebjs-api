@@ -136,14 +136,39 @@ function getMessageOptions(options: SendMessageOptions, logger: ProcessingLogger
 }
 
 function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogger): AnyMediaMessageContent {
-  // Extrair informações do arquivo do objeto file, se disponível
+  // Extrair informações do arquivo
   const fileName = options.fileName || options.file?.name || "file";
-  const mimeType = options.file?.mime_type || "application/octet-stream";
+  
+  // IMPORTANTE: Priorizar o fileType que vem do backend, pois já foi processado corretamente
+  // options.file?.mime_type pode estar incorreto (application/octet-stream)
+  let mimeType = "application/octet-stream";
+  
+  if (options.file?.mime_type && options.file.mime_type !== "application/octet-stream") {
+    // Se tem mime_type válido no objeto file, usar
+    mimeType = options.file.mime_type;
+  } else if (options.fileType) {
+    // Caso contrário, inferir do fileType
+    switch (options.fileType) {
+      case "image":
+        mimeType = "image/png";
+        break;
+      case "video":
+        mimeType = "video/mp4";
+        break;
+      case "audio":
+        mimeType = "audio/ogg; codecs=opus";
+        break;
+      case "document":
+        mimeType = "application/pdf";
+        break;
+    }
+  }
 
   logger.debug(`Preparando opções de arquivo`, { 
     fileType: options.fileType, 
     fileName, 
     mimeType,
+    originalMimeType: options.file?.mime_type,
     fileUrl: options.fileUrl,
     hasFileObject: !!options.file,
     text: options.text,
@@ -165,30 +190,26 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
     };
   }
 
-  // Verificar tipo de arquivo por fileType ou mimeType
-  const isImage = fileType === "image" || mimeType.includes("image");
-  const isVideo = fileType === "video" || mimeType.includes("video");
-  const isAudio = fileType === "audio" || mimeType.includes("audio");
+  logger.debug(`Verificando tipo de arquivo`, { fileType });
 
-  logger.debug(`Tipo de mídia detectado`, { fileType, isImage, isVideo, isAudio });
-
-  if (isImage) {
-    logger.debug(`Criando mensagem de imagem`, { url: options.fileUrl });
+  // Verificar tipo de arquivo por fileType
+  if (fileType === "image") {
+    logger.debug(`Criando mensagem de imagem`, { url: options.fileUrl, mimeType });
     return {
       image: { url: options.fileUrl },
       ...(options.text ? { caption: options.text } : {}),
     };
   }
   
-  if (isVideo) {
-    logger.debug(`Criando mensagem de vídeo`, { url: options.fileUrl });
+  if (fileType === "video") {
+    logger.debug(`Criando mensagem de vídeo`, { url: options.fileUrl, mimeType });
     return {
       video: { url: options.fileUrl },
       ...(options.text ? { caption: options.text } : {}),
     };
   }
   
-  if (isAudio) {
+  if (fileType === "audio") {
     logger.debug(`Criando mensagem de áudio`, { url: options.fileUrl, mimeType, sendAsAudio: options.sendAsAudio });
     
     // sendAsAudio = false significa PTT (mensagem de voz)
@@ -212,7 +233,7 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
   }
 
   // Fallback: documento
-  logger.debug(`Enviando como documento (fallback)`, { fileName, mimeType });
+  logger.debug(`Enviando como documento (fallback)`, { fileName, mimeType, fileType });
   return {
     document: { url: options.fileUrl },
     mimetype: mimeType,
