@@ -6,6 +6,7 @@ import { calculateTypingDuration, sleep } from "../../../../utils/humanize.utils
 import { SendFileOptions, SendMessageOptions } from "../../types";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import parseMessage from "./parse-message";
+import filesService from "../../../files/files.service";
 
 interface SendMessageContext {
   client: BaileysWhatsappClient;
@@ -47,7 +48,7 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
 
     let messageOptions;
     try {
-      messageOptions = getMessageOptions(options, logger);
+      messageOptions = await getMessageOptions(options, logger);
       logger.debug(`Opções de mensagem preparadas`, { isGroup });
     } catch (error) {
       logger.log(`Erro ao preparar opções de mensagem: ${error instanceof Error ? error.message : String(error)}`);
@@ -107,7 +108,7 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
     if (err instanceof Error && err.stack) {
       logger.debug(`Stack trace: ${err.stack}`);
     }
-    
+
     if (tryCount == 0) {
       logger.log(`Falha na primeira tentativa, convertendo para formato alternativo`);
       options.to = phoneToAltBr(options.to);
@@ -117,14 +118,14 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
   }
 }
 
-function getMessageOptions(options: SendMessageOptions, logger: ProcessingLogger): AnyRegularMessageContent {
+async function getMessageOptions(options: SendMessageOptions, logger: ProcessingLogger): Promise<AnyRegularMessageContent> {
   logger.debug(`Preparando opções de mensagem`);
   const isFileMessage = "fileUrl" in options;
   logger.debug(`Tipo de mensagem: ${isFileMessage ? "arquivo" : "texto"}`);
 
   if (isFileMessage) {
     logger.debug(`Processando mensagem de arquivo`);
-    return getFileMessageOptions(options as SendFileOptions, logger);
+    return await getFileMessageOptions(options as SendFileOptions, logger);
   }
   if (!options.text) {
     throw new Error("Text message must have 'text' property");
@@ -135,38 +136,20 @@ function getMessageOptions(options: SendMessageOptions, logger: ProcessingLogger
   };
 }
 
-function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogger): AnyMediaMessageContent {
+async function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogger): Promise<AnyMediaMessageContent> {
   // Extrair informações do arquivo
   const fileName = options.fileName || options.file?.name || "file";
-  
+
   // IMPORTANTE: Priorizar o fileType que vem do backend, pois já foi processado corretamente
   // options.file?.mime_type pode estar incorreto (application/octet-stream)
-  let mimeType = "application/octet-stream";
-  
-  if (options.file?.mime_type && options.file.mime_type !== "application/octet-stream") {
-    // Se tem mime_type válido no objeto file, usar
-    mimeType = options.file.mime_type;
-  } else if (options.fileType) {
-    // Caso contrário, inferir do fileType
-    switch (options.fileType) {
-      case "image":
-        mimeType = "image/png";
-        break;
-      case "video":
-        mimeType = "video/mp4";
-        break;
-      case "audio":
-        mimeType = "audio/ogg; codecs=opus";
-        break;
-      case "document":
-        mimeType = "application/pdf";
-        break;
-    }
-  }
+  const fileId = Number(options.fileUrl.split("/").pop() || "") || null;
+  const metadata = fileId ? await filesService.fetchFileMetadata(fileId) : null;
 
-  logger.debug(`Preparando opções de arquivo`, { 
-    fileType: options.fileType, 
-    fileName, 
+  let mimeType = metadata?.mime_type || options.file?.mime_type || "application/octet-stream";
+
+  logger.debug(`Preparando opções de arquivo`, {
+    fileType: options.fileType,
+    fileName,
     mimeType,
     originalMimeType: options.file?.mime_type,
     fileUrl: options.fileUrl,
@@ -178,7 +161,7 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
 
   // Priorizar options.fileType que vem do backend já processado
   const fileType = options.fileType;
-  
+
   // Se sendAsDocument = true, força envio como documento
   if (options.sendAsDocument) {
     logger.debug(`Enviando como documento (sendAsDocument = true)`, { fileName, mimeType });
@@ -200,7 +183,7 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
       ...(options.text ? { caption: options.text } : {}),
     };
   }
-  
+
   if (fileType === "video") {
     logger.debug(`Criando mensagem de vídeo`, { url: options.fileUrl, mimeType });
     return {
@@ -208,14 +191,14 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
       ...(options.text ? { caption: options.text } : {}),
     };
   }
-  
+
   if (fileType === "audio") {
     logger.debug(`Criando mensagem de áudio`, { url: options.fileUrl, mimeType, sendAsAudio: options.sendAsAudio });
-    
+
     // sendAsAudio = false significa PTT (mensagem de voz)
     // sendAsAudio = true significa áudio normal
     const isPTT = options.sendAsAudio === false;
-    
+
     if (isPTT) {
       logger.debug(`Enviando como PTT (mensagem de voz)`);
       return {
