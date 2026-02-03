@@ -38,7 +38,7 @@ class ExpressApi {
     res.status(200).send("OK");
   }
 
-  private errorHandler(error: Error, req: Request, res: Response, next: NextFunction): void {
+  private errorHandler(error: Error, req: Request, res: Response, _next: NextFunction): void {
     console.error("[API] Unhandled error in request:", {
       method: req.method,
       path: req.path,
