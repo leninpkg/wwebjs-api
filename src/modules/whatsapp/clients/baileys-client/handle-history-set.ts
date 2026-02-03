@@ -9,12 +9,18 @@ const HISTORY_MIN_DATE = getHistoryMinDate();
 
 function getHistoryMinDate(): number {
   if (process.env["HISTORY_MIN_DATE"]) {
-    return new Date(process.env["HISTORY_MIN_DATE"]).getTime() / 1000;
+    const envDate = process.env["HISTORY_MIN_DATE"];
+    const parsedDate = new Date(envDate);
+    const timestamp = Math.floor(parsedDate.getTime() / 1000);
+    console.log(`[HISTORY_MIN_DATE] Env value: "${envDate}" → Parsed: ${parsedDate.toISOString()} → Timestamp (seconds): ${timestamp}`);
+    return timestamp;
   }
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  return sevenDaysAgo.getTime() / 1000;
+  const timestamp = Math.floor(sevenDaysAgo.getTime() / 1000);
+  console.log(`[HISTORY_MIN_DATE] Using default (7 days ago): ${sevenDaysAgo.toISOString()} → Timestamp: ${timestamp}`);
+  return timestamp;
 }
 
 interface HistorySetContext {
@@ -42,11 +48,14 @@ async function handleHistorySet({
 }: HistorySetContext): Promise<HistorySetResult> {
   logger.log("Received messaging history set", { messageCount: messages.length, isLatest });
 
-  const lastSyncAt = await client._storage.getLastSyncAt(client.sessionId);
-  logger.log("Last sync date retrieved", { lastSyncAt });
-
   const minTimestamp = HISTORY_MIN_DATE;
-  logger.log("Filtering messages", { minTimestamp, HISTORY_MIN_DATE, lastSyncAt });
+  const minDate = new Date(minTimestamp * 1000);
+  logger.log("Filtering messages", { 
+    minTimestamp, 
+    minDateISO: minDate.toISOString(),
+    minDateLocal: minDate.toLocaleString(),
+    envValue: process.env["HISTORY_MIN_DATE"]
+  });
 
   const { savedCount, skippedCount, skippedByDateCount } = await saveNewMessages({
     client,
@@ -133,11 +142,18 @@ function isMessageTooOld(message: WAMessage, minTimestamp: number | null): boole
     return false;
   }
 
-  const messageTimestamp = typeof message.messageTimestamp === "number"
+  let messageTimestamp = typeof message.messageTimestamp === "number"
     ? message.messageTimestamp
     : Number(message.messageTimestamp);
 
-  return messageTimestamp < minTimestamp;
+  // Log para debug: mostrar as primeiras mensagens verificadas
+  const msgDate = new Date(messageTimestamp * 1000);
+  const minDate = new Date(minTimestamp * 1000);
+  const isTooOld = messageTimestamp < minTimestamp;
+  
+  console.log(`[MSG_CHECK] ID: ${message.key.id?.substring(0, 15)}... | Msg: ${msgDate.toISOString()} (${messageTimestamp}) | Min: ${minDate.toISOString()} (${minTimestamp}) | Too old? ${isTooOld}`);
+
+  return isTooOld;
 }
 
 export default handleHistorySet;
