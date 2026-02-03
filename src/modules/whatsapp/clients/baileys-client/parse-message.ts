@@ -4,7 +4,7 @@ import ProcessingLogger from "../../../../utils/processing-logger";
 import filesService from "../../../files/files.service";
 import MessageDto from "../../types";
 
-type MessageType = "chat" | "image" | "video" | "audio" | "document" | "sticker" | "unsupported";
+type MessageType = "chat" | "image" | "video" | "audio" | "document" | "sticker" | "contact" | "location" | "call" | "unsupported";
 
 interface ParseMessageParams {
   message: WAMessage;
@@ -151,6 +151,21 @@ function getMessageContent(message: WAMessage, logger: ProcessingLogger): Messag
       isFile: true,
     };
   }
+  if (message.message?.documentWithCaptionMessage) {
+    logger.debug("Message is document with caption message");
+    const docMessage = message.message.documentWithCaptionMessage.message?.documentMessage;
+    if (docMessage) {
+      return {
+        ...messageBase,
+        body: docMessage.caption || "",
+        type: "document",
+        fileName: docMessage.fileName || "document",
+        fileType: docMessage.mimetype || "application/octet-stream",
+        fileSize: String(docMessage.fileLength || 0),
+        isFile: true,
+      };
+    }
+  }
   if (message.message?.stickerMessage) {
     logger.debug("Message is sticker message");
     return {
@@ -164,11 +179,148 @@ function getMessageContent(message: WAMessage, logger: ProcessingLogger): Messag
     };
   }
 
+  if (message.message?.contactMessage) {
+    logger.debug("Message is contact message");
+    const contact = message.message.contactMessage;
+    const contactName = contact.displayName || "Contato";
+    const contactNumber = contact.vcard?.split("TEL:")[1]?.split("\n")[0] || "Sem número";
+    return {
+      ...messageBase,
+      type: "contact",
+      body: `📇 Contato: ${contactName} (${contactNumber})`,
+      isFile: false,
+    };
+  }
+
+  if (message.message?.locationMessage) {
+    logger.debug("Message is location message");
+    const location = message.message.locationMessage;
+    const latitude = location.degreesLatitude;
+    const longitude = location.degreesLongitude;
+    return {
+      ...messageBase,
+      type: "location",
+      body: `📍 Localização: https://maps.google.com/maps?q=${latitude},${longitude}`,
+      isFile: false,
+    };
+  }
+
+  if (message.message?.bcallMessage) {
+    logger.debug("Message is call message");
+    return {
+      ...messageBase,
+      type: "call",
+      body: "☎️ Chamada",
+      isFile: false,
+    };
+  }
+
+  if (message.message?.viewOnceMessage) {
+    logger.debug("Message is view once message (visualizar uma vez)");
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: "🔐 Mensagem com visualização única - Este tipo de mensagem só pode ser vista uma vez e não pode ser armazenada",
+      isFile: false,
+    };
+  }
+
+  if (message.message?.ephemeralMessage) {
+    logger.debug("Message is ephemeral message (mensagem que desaparece)");
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: "⏰ Mensagem temporária - Este tipo de mensagem é configurada para desaparecer e não pode ser armazenada",
+      isFile: false,
+    };
+  }
+
+  if (message.message?.listMessage) {
+    logger.debug("Message is list message");
+    const listMsg = message.message.listMessage;
+    const title = listMsg.title || "Lista";
+    const description = listMsg.description || "Selecione uma opção";
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: `📋 ${title}: ${description}\n⚠️ Este tipo de mensagem interativa (lista) deve ser visualizada no aplicativo WhatsApp`,
+      isFile: false,
+    };
+  }
+
+  if (message.message?.buttonsMessage) {
+    logger.debug("Message is buttons message");
+    const buttonsMsg = message.message.buttonsMessage;
+    const buttonTexts = buttonsMsg.buttons?.map((b: any) => `• ${b.buttonText?.displayText || b.buttonId}`).join("\n") || "";
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: `🔘 ${buttonsMsg.contentText}\n${buttonTexts}\n⚠️ Este tipo de mensagem interativa (botões) deve ser visualizada no aplicativo WhatsApp`,
+      isFile: false,
+    };
+  }
+
+  if (message.message?.templateMessage) {
+    logger.debug("Message is template message");
+    const templateMsg = message.message.templateMessage;
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: `📧 Template: ${templateMsg.hydratedTemplate?.hydratedContentText || "Mensagem de template"}\n⚠️ Este tipo de mensagem de template deve ser visualizada no aplicativo WhatsApp`,
+      isFile: false,
+    };
+  }
+
+  if (message.message?.interactiveMessage) {
+    logger.debug("Message is interactive message");
+    const interactiveMsg = message.message.interactiveMessage;
+    const body = interactiveMsg.body?.text || "Mensagem interativa";
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: `💬 ${body}\n⚠️ Esta mensagem interativa deve ser visualizada no aplicativo WhatsApp`,
+      isFile: false,
+    };
+  }
+
+  if (message.message?.pollUpdateMessage) {
+    logger.debug("Message is poll update message");
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: "🗳️ Atualização de enquete - Esta mensagem deve ser visualizada no aplicativo WhatsApp",
+      isFile: false,
+    };
+  }
+
+  if (message.message?.pollCreationMessage) {
+    logger.debug("Message is poll creation message");
+    const poll = message.message.pollCreationMessage;
+    const options = poll.options?.map((opt: any) => `• ${opt.optionName}`).join("\n") || "";
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: `🗳️ Enquete: ${poll.name}\n${options}\n⚠️ Enquetes devem ser respondidas no aplicativo WhatsApp`,
+      isFile: false,
+    };
+  }
+
+  if (message.message?.groupInviteMessage) {
+    logger.debug("Message is group invite message");
+    const groupInvite = message.message.groupInviteMessage;
+    return {
+      ...messageBase,
+      type: "unsupported",
+      body: `👥 Convite para grupo: ${groupInvite.groupName || "Grupo"}\n⚠️ Convites de grupo devem ser aceitos no aplicativo WhatsApp`,
+      isFile: false,
+    };
+  }
+
   logger.debug("Message type is unsupported");
   return {
     ...messageBase,
     type: "unsupported",
-    body: "",
+    body: "⚠️ Tipo de mensagem não suportado - Esta mensagem só pode ser visualizada no aplicativo WhatsApp",
     isFile: false,
   };
 }
