@@ -1,4 +1,4 @@
-import express, { Request, Response, Router } from "express";
+import express, { Request, Response, Router, NextFunction } from "express";
 import WhatsappClient from "./modules/whatsapp/clients/whatsapp-client";
 import type { FetchMessageHistoryOptions } from "./modules/whatsapp/types";
 
@@ -19,6 +19,9 @@ class ExpressApi {
 
     this.app.use(express.json());
     this.app.use("/api", this.router);
+    
+    // Middleware global de tratamento de erros
+    this.app.use(this.errorHandler.bind(this));
   }
 
   public static create(client: WhatsappClient): ExpressApi {
@@ -35,12 +38,34 @@ class ExpressApi {
     res.status(200).send("OK");
   }
 
+  private errorHandler(error: Error, req: Request, res: Response, next: NextFunction): void {
+    console.error("[API] Unhandled error in request:", {
+      method: req.method,
+      path: req.path,
+      body: req.body,
+      error: error.message,
+      stack: error.stack
+    });
+    
+    res.status(500).json({
+      error: "Internal server error",
+      message: error.message,
+      details: error.stack
+    });
+  }
+
   private async sendMessage(req: Request, res: Response): Promise<void> {
     try {
       const result = await this.client.sendMessage(req.body);
       res.status(201).send(result);
     } catch (error) {
-      res.status(500).send(error);
+      console.error("[API] Error sending message:", error);
+      console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
+      res.status(500).json({ 
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+        details: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 
@@ -49,7 +74,13 @@ class ExpressApi {
       const result = await this.client.editMessage(req.body);
       res.status(200).send(result);
     } catch (error) {
-      res.status(500).send(error);
+      console.error("[API] Error editing message:", error);
+      console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
+      res.status(500).json({ 
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+        details: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 
@@ -59,7 +90,13 @@ class ExpressApi {
       const result = await this.client.fetchMessageHistory(options);
       res.status(200).send(result);
     } catch (error) {
-      res.status(500).send(error);
+      console.error("[API] Error fetching message history:", error);
+      console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
+      res.status(500).json({ 
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+        details: error instanceof Error ? error.stack : undefined
+      });
     }
   }
 }

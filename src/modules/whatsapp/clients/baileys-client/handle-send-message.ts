@@ -43,8 +43,14 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
       throw new Error(`Failed to normalize JID for phone: ${options.to}`);
     }
 
-    const messageOptions = getMessageOptions(options, logger);
-    logger.debug(`Opções de mensagem preparadas`, { isGroup });
+    let messageOptions;
+    try {
+      messageOptions = getMessageOptions(options, logger);
+      logger.debug(`Opções de mensagem preparadas`, { isGroup });
+    } catch (error) {
+      logger.log(`Erro ao preparar opções de mensagem: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
 
     // Simular digitação para humanizar a interação
     const messageText = options.text || "";
@@ -69,7 +75,13 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
       logger.debug(`Estado de pausa enviado para: ${jid}`);
     }
 
-    const message = await client._sock.sendMessage(jid, messageOptions);
+    let message;
+    try {
+      message = await client._sock.sendMessage(jid, messageOptions);
+    } catch (error) {
+      logger.log(`Erro ao enviar mensagem via socket: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
 
     if (!message) {
       throw new Error("Failed to send message");
@@ -89,6 +101,11 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
     logger.success(parsedMessage);
     return parsedMessage;
   } catch (err) {
+    logger.log(`Erro capturado: ${err instanceof Error ? err.message : String(err)}`);
+    if (err instanceof Error && err.stack) {
+      logger.debug(`Stack trace: ${err.stack}`);
+    }
+    
     if (tryCount == 0) {
       logger.log(`Falha na primeira tentativa, convertendo para formato alternativo`);
       options.to = phoneToAltBr(options.to);
@@ -121,11 +138,20 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
   const fileName = options.fileName || options.file?.name || "file";
   const mimeType = options.file?.mime_type || options.fileType || "application/octet-stream";
 
-  logger.debug(`Preparando opções de arquivo`, { fileType: options.fileType, fileName, mimeType });
+  logger.debug(`Preparando opções de arquivo`, { 
+    fileType: options.fileType, 
+    fileName, 
+    mimeType,
+    fileUrl: options.fileUrl,
+    hasFileObject: !!options.file,
+    text: options.text 
+  });
 
   const isImage = mimeType.includes("image") || options.fileType === "image";
   const isVideo = mimeType.includes("video") || options.fileType === "video";
   const isAudio = mimeType.includes("audio") || options.fileType === "audio";
+
+  logger.debug(`Tipo de mídia detectado`, { isImage, isVideo, isAudio });
 
   if (isImage) {
     logger.debug(`Criando mensagem de imagem`, { url: options.fileUrl });
@@ -142,11 +168,27 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
     };
   }
   if (isAudio) {
-    logger.debug(`Criando mensagem de áudio`, { url: options.fileUrl });
-    return {
-      audio: { url: options.fileUrl },
-      ...(options.text ? { caption: options.text } : {}),
-    };
+    logger.debug(`Criando mensagem de áudio`, { url: options.fileUrl, mimeType });
+    
+    // Verificar se deve enviar como áudio ou PTT (Push-to-Talk)
+    const shouldSendAsAudio = options.sendAsAudio !== false; // default true
+    
+    if (shouldSendAsAudio) {
+      logger.debug(`Enviando como áudio (não PTT)`);
+      return {
+        audio: { url: options.fileUrl },
+        mimetype: mimeType,
+        ...(options.text ? { caption: options.text } : {}),
+      };
+    } else {
+      logger.debug(`Enviando como PTT (áudio de voz)`);
+      return {
+        audio: { url: options.fileUrl },
+        mimetype: mimeType,
+        ptt: true,
+        ...(options.text ? { caption: options.text } : {}),
+      };
+    }
   }
 
   logger.debug(`Criando mensagem de documento`, { fileName, mimeType });

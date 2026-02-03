@@ -4,6 +4,18 @@ import HttpWppEventEmitter from "./modules/events/emitter/http-emitter";
 import BaileysWhatsappClient from "./modules/whatsapp/clients/baileys-client/baileys-whatsapp-client";
 import { config } from "dotenv";
 
+// Handlers globais para erros não capturados
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise);
+  console.error('Reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  // Não fazer exit aqui para manter o servidor rodando
+});
+
 async function runApp() {
   config();
 
