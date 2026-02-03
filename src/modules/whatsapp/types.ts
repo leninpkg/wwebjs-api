@@ -47,6 +47,7 @@ interface BaseSendMessageOptions {
   to: string;
   quotedId?: string | null;
   mentions?: Mentions;
+  isGroup?: boolean;
 }
 
 export type SendFileType = "image" | "video" | "audio" | "document";

@@ -15,14 +15,15 @@ interface EditMessageContext {
  * Converts "5511999999999" to "5511999999999@s.whatsapp.net"
  */
 function normalizeToJid(to: string): string {
-  // Remove any existing @s.whatsapp.net suffix
-  const cleanPhone = to.replace("@s.whatsapp.net", "").trim();
+  // Remove any existing suffix
+  const cleanPhone = to.replace(/@(s\.whatsapp\.net|c\.us)$/, "").trim();
 
   // Validate it's a valid phone number
   if (!cleanPhone || !/^\d+$/.test(cleanPhone)) {
     throw new Error(`Invalid phone number format: ${to}`);
   }
 
+  // For mentions, always use @s.whatsapp.net (individual contacts)
   return `${cleanPhone}@s.whatsapp.net`;
 }
 
@@ -34,7 +35,8 @@ async function handleEditMessage({ client, options, logger }: EditMessageContext
     throw new Error(`Message with ID ${options.messageId} not found`);
   }
 
-  logger.log(`Preparing mentions for message ID ${options.messageId}`);
+  const isGroup = message.remote_jid.endsWith("@g.us");
+  logger.log(`Preparing mentions for message ID ${options.messageId} (isGroup: ${isGroup})`);
   const mentions: string[] = [];
 
   options.mentions?.forEach((mention) => {

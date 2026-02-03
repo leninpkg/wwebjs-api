@@ -56,7 +56,8 @@ class ExpressApi {
 
   private async sendMessage(req: Request, res: Response): Promise<void> {
     try {
-      const result = await this.client.sendMessage(req.body);
+      const { isGroup, ...messageOptions } = req.body;
+      const result = await this.client.sendMessage(messageOptions, isGroup || false);
       res.status(201).send(result);
     } catch (error) {
       console.error("[API] Error sending message:", error);
