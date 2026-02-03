@@ -46,6 +46,12 @@ async function handleMessageUpsert({ messages, type, client, logger }: MessageUp
       continue;
     }
 
+    // Ignorar mensagens de reação
+    if (message.message?.reactionMessage) {
+      logger.log("Skipping reaction message", { messageId: message.key?.id });
+      continue;
+    }
+
     if (message.message) {
       logger.log("Saving message to storage", { messageId: message.key?.id });
       await client._storage.saveMessage({
