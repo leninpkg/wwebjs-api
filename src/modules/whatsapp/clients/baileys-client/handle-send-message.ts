@@ -159,8 +159,22 @@ async function getFileMessageOptions(options: SendFileOptions, logger: Processin
     sendAsDocument: options.sendAsDocument
   });
 
-  // Priorizar options.fileType que vem do backend já processado
-  const fileType = options.fileType;
+  let fileType: string = options.fileType || "";
+
+  if (!fileType) {
+    if (mimeType.startsWith("image/")) {
+      fileType = "image";
+    }
+    else if (mimeType.startsWith("video/")) {
+      fileType = "video";
+    }
+    else if (mimeType.startsWith("audio/")) {
+      fileType = "audio";
+    }
+    else {
+      fileType = "document";
+    }
+  }
 
   // Se sendAsDocument = true, força envio como documento
   if (options.sendAsDocument) {
