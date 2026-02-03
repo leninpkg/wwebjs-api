@@ -1,6 +1,7 @@
 import express, { Request, Response, Router, NextFunction } from "express";
 import WhatsappClient from "./modules/whatsapp/clients/whatsapp-client";
 import type { FetchMessageHistoryOptions } from "./modules/whatsapp/types";
+import { Logger } from "@in.pulse-crm/utils";
 
 class ExpressApi {
   private client: WhatsappClient;
@@ -19,7 +20,7 @@ class ExpressApi {
 
     this.app.use(express.json());
     this.app.use("/api", this.router);
-    
+
     // Middleware global de tratamento de erros
     this.app.use(this.errorHandler.bind(this));
   }
@@ -46,7 +47,7 @@ class ExpressApi {
       error: error.message,
       stack: error.stack
     });
-    
+
     res.status(500).json({
       error: "Internal server error",
       message: error.message,
@@ -57,12 +58,15 @@ class ExpressApi {
   private async sendMessage(req: Request, res: Response): Promise<void> {
     try {
       const { isGroup, ...messageOptions } = req.body;
+
+      Logger.debug("[API] Sending message with options:", messageOptions);
+
       const result = await this.client.sendMessage(messageOptions, isGroup || false);
       res.status(201).send(result);
     } catch (error) {
       console.error("[API] Error sending message:", error);
       console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Internal server error",
         message: error instanceof Error ? error.message : String(error),
         details: error instanceof Error ? error.stack : undefined
@@ -77,7 +81,7 @@ class ExpressApi {
     } catch (error) {
       console.error("[API] Error editing message:", error);
       console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Internal server error",
         message: error instanceof Error ? error.message : String(error),
         details: error instanceof Error ? error.stack : undefined
@@ -93,7 +97,7 @@ class ExpressApi {
     } catch (error) {
       console.error("[API] Error fetching message history:", error);
       console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Internal server error",
         message: error instanceof Error ? error.message : String(error),
         details: error instanceof Error ? error.stack : undefined
