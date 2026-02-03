@@ -17,25 +17,27 @@ interface SendMessageContext {
 /**
  * Normalize phone number to JID format
  * Converts "5511999999999" to "5511999999999@s.whatsapp.net"
+ * For groups: "120363400058576861" to "120363400058576861@g.us"
  */
-function normalizeToJid(to: string): string {
-  // Remove any existing @s.whatsapp.net suffix
-  const cleanPhone = to.replace("@s.whatsapp.net", "").trim();
+function normalizeToJid(to: string, isGroup: boolean = false): string {
+  // Remove any existing suffix
+  const cleanId = to.replace(/@(s\.whatsapp\.net|g\.us)/, "").trim();
 
-  // Validate it's a valid phone number
-  if (!cleanPhone || !/^\d+$/.test(cleanPhone)) {
-    throw new Error(`Invalid phone number format: ${to}`);
+  // Validate it's a valid ID (only digits)
+  if (!cleanId || !/^\d+$/.test(cleanId)) {
+    throw new Error(`Invalid ${isGroup ? 'group' : 'phone'} ID format: ${to}`);
   }
 
-  return `${cleanPhone}@s.whatsapp.net`;
+  // Return with appropriate suffix based on whether it's a group or individual
+  return isGroup ? `${cleanId}@g.us` : `${cleanId}@s.whatsapp.net`;
 }
 
 async function handleSendMessage({ client, options, isGroup, logger }: SendMessageContext, tryCount: number = 0) {
   try {
     logger.log(`Iniciando envio de mensagem para: ${options.to} (tentativa ${tryCount + 1})`);
 
-    const normalizedTo = normalizeToJid(options.to);
-    logger.debug(`JID normalizado: ${normalizedTo}`);
+    const normalizedTo = normalizeToJid(options.to, isGroup);
+    logger.debug(`JID normalizado: ${normalizedTo} (isGroup: ${isGroup})`);
 
     const jid = jidNormalizedUser(normalizedTo);
 
