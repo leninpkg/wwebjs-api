@@ -138,7 +138,7 @@ function getMessageOptions(options: SendMessageOptions, logger: ProcessingLogger
 function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogger): AnyMediaMessageContent {
   // Extrair informações do arquivo do objeto file, se disponível
   const fileName = options.fileName || options.file?.name || "file";
-  const mimeType = options.file?.mime_type || options.fileType || "application/octet-stream";
+  const mimeType = options.file?.mime_type || "application/octet-stream";
 
   logger.debug(`Preparando opções de arquivo`, { 
     fileType: options.fileType, 
@@ -146,14 +146,31 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
     mimeType,
     fileUrl: options.fileUrl,
     hasFileObject: !!options.file,
-    text: options.text 
+    text: options.text,
+    sendAsAudio: options.sendAsAudio,
+    sendAsDocument: options.sendAsDocument
   });
 
-  const isImage = mimeType.includes("image") || options.fileType === "image";
-  const isVideo = mimeType.includes("video") || options.fileType === "video";
-  const isAudio = mimeType.includes("audio") || options.fileType === "audio";
+  // Priorizar options.fileType que vem do backend já processado
+  const fileType = options.fileType;
+  
+  // Se sendAsDocument = true, força envio como documento
+  if (options.sendAsDocument) {
+    logger.debug(`Enviando como documento (sendAsDocument = true)`, { fileName, mimeType });
+    return {
+      document: { url: options.fileUrl },
+      mimetype: mimeType,
+      fileName: fileName,
+      ...(options.text ? { caption: options.text } : {}),
+    };
+  }
 
-  logger.debug(`Tipo de mídia detectado`, { isImage, isVideo, isAudio });
+  // Verificar tipo de arquivo por fileType ou mimeType
+  const isImage = fileType === "image" || mimeType.includes("image");
+  const isVideo = fileType === "video" || mimeType.includes("video");
+  const isAudio = fileType === "audio" || mimeType.includes("audio");
+
+  logger.debug(`Tipo de mídia detectado`, { fileType, isImage, isVideo, isAudio });
 
   if (isImage) {
     logger.debug(`Criando mensagem de imagem`, { url: options.fileUrl });
@@ -162,6 +179,7 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
       ...(options.text ? { caption: options.text } : {}),
     };
   }
+  
   if (isVideo) {
     logger.debug(`Criando mensagem de vídeo`, { url: options.fileUrl });
     return {
@@ -169,35 +187,34 @@ function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogge
       ...(options.text ? { caption: options.text } : {}),
     };
   }
+  
   if (isAudio) {
-    logger.debug(`Criando mensagem de áudio`, { url: options.fileUrl, mimeType });
+    logger.debug(`Criando mensagem de áudio`, { url: options.fileUrl, mimeType, sendAsAudio: options.sendAsAudio });
     
-    // Verificar se deve enviar como áudio ou PTT (Push-to-Talk)
-    const shouldSendAsAudio = options.sendAsAudio !== false; // default true
+    // sendAsAudio = false significa PTT (mensagem de voz)
+    // sendAsAudio = true significa áudio normal
+    const isPTT = options.sendAsAudio === false;
     
-    if (shouldSendAsAudio) {
-      logger.debug(`Enviando como áudio (não PTT)`);
-      return {
-        audio: { url: options.fileUrl },
-        mimetype: mimeType,
-        ...(options.text ? { caption: options.text } : {}),
-      };
-    } else {
-      logger.debug(`Enviando como PTT (áudio de voz)`);
+    if (isPTT) {
+      logger.debug(`Enviando como PTT (mensagem de voz)`);
       return {
         audio: { url: options.fileUrl },
         mimetype: mimeType,
         ptt: true,
-        ...(options.text ? { caption: options.text } : {}),
+      };
+    } else {
+      logger.debug(`Enviando como áudio normal`);
+      return {
+        audio: { url: options.fileUrl },
+        mimetype: mimeType,
       };
     }
   }
 
-  logger.debug(`Criando mensagem de documento`, { fileName, mimeType });
+  // Fallback: documento
+  logger.debug(`Enviando como documento (fallback)`, { fileName, mimeType });
   return {
-    document: {
-      url: options.fileUrl,
-    },
+    document: { url: options.fileUrl },
     mimetype: mimeType,
     fileName: fileName,
     ...(options.text ? { caption: options.text } : {}),
