@@ -3,6 +3,7 @@ import ProcessingLogger from "../../../../utils/processing-logger";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import { reprocessHistoryMessages } from "./handle-fetch-message-history";
 import "dotenv/config";
+import { Logger } from "@in.pulse-crm/utils";
 
 // Data mínima para sincronização de histórico
 const HISTORY_MIN_DATE = getHistoryMinDate();
@@ -50,11 +51,15 @@ async function handleHistorySet({
 
   const minTimestamp = HISTORY_MIN_DATE;
   const minDate = new Date(minTimestamp * 1000);
-  logger.log("Filtering messages", { 
-    minTimestamp, 
+  logger.log("Filtering messages", {
+    minTimestamp,
     minDateISO: minDate.toISOString(),
     minDateLocal: minDate.toLocaleString(),
     envValue: process.env["HISTORY_MIN_DATE"]
+  });
+
+  Logger.debug("[HISTORY] Starting to save new messages from history", {
+    minDate: minDate.toLocaleString()
   });
 
   const { savedCount, skippedCount, skippedByDateCount } = await saveNewMessages({
@@ -137,7 +142,7 @@ async function saveNewMessages({
   return { savedCount, skippedCount, skippedByDateCount };
 }
 
-function isMessageTooOld(message: WAMessage, minTimestamp: number | null): boolean {
+export function isMessageTooOld(message: WAMessage, minTimestamp: number | null): boolean {
   if (!minTimestamp || !message.messageTimestamp) {
     return false;
   }
@@ -175,7 +180,7 @@ function isMessageTooOld(message: WAMessage, minTimestamp: number | null): boole
   const msgDate = new Date(messageTimestamp * 1000);
   const minDate = new Date(normalizedMinTimestamp * 1000);
   const isTooOld = messageTimestamp < normalizedMinTimestamp;
-  
+
   console.log(`[MSG_CHECK] ID: ${message.key.id?.substring(0, 15)}... | Msg: ${msgDate.toISOString()} (${messageTimestamp}, ${finalMsgStr.length}d) | Min: ${minDate.toISOString()} (${normalizedMinTimestamp}, ${finalMinStr.length}d) | Too old? ${isTooOld}`);
 
   return isTooOld;

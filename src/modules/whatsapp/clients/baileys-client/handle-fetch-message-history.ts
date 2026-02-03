@@ -1,8 +1,9 @@
-import { WAMessageKey } from "baileys";
+import { WAMessage, WAMessageKey } from "baileys";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import parseMessage from "./parse-message";
 import MessageDto from "../../types";
+import { isMessageTooOld } from "./handle-history-set";
 
 export interface FetchMessageHistoryOptions {
   /** JID do chat (ex: 5511999999999@s.whatsapp.net) */
@@ -110,8 +111,9 @@ export async function handleRequestPlaceholderResend(
  */
 export async function reprocessHistoryMessages(
   client: BaileysWhatsappClient,
-  messages: any[],
+  messages: WAMessage[],
   logger: ProcessingLogger,
+  minTimestamp?: number,
 ): Promise<MessageDto[]> {
   const processedMessages: MessageDto[] = [];
 
@@ -119,6 +121,11 @@ export async function reprocessHistoryMessages(
 
   for (const message of messages) {
     try {
+
+      if (minTimestamp && isMessageTooOld(message, minTimestamp)) {
+        logger.log("Skipping message older than minimum timestamp", { messageId: message.key?.id });
+        continue;
+      }
       // Ignorar mensagens próprias
       if (message.key?.fromMe) {
         logger.log("Skipping own message", { messageId: message.key?.id });
