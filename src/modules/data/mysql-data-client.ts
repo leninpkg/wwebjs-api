@@ -71,7 +71,7 @@ class MySQLDataClient extends DataClient {
     } catch (error: any) {
       // Se a tabela não existe, retorna undefined (o Baileys vai buscar os dados do WhatsApp)
       if (error.code === 'ER_NO_SUCH_TABLE') {
-        Logger.warn(`Table 'group_metadata' does not exist. Consider running migration 003_add_group_metadata_table.sql`);
+        Logger.info(`Table 'group_metadata' does not exist. Consider running migration 003_add_group_metadata_table.sql`);
         return undefined;
       }
       Logger.error("Error fetching group metadata from MySQL", error);
