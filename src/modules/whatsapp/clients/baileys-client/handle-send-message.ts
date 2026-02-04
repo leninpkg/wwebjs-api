@@ -100,6 +100,11 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
       logger,
     });
 
+    // Adicionar delay aleatório entre 3-8 segundos para simular comportamento humano
+    const randomDelay = Math.floor(Math.random() * 5000) + 3000; // 3000-8000ms
+    logger.debug(`Aguardando ${randomDelay}ms antes da próxima mensagem (comportamento humanizado)`);
+    await sleep(randomDelay);
+
     Logger.debug("Mensagem parseada com sucesso", parsedMessage);
     logger.success(parsedMessage);
     return parsedMessage;

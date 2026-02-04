@@ -1,4 +1,5 @@
 import makeWASocket, { MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
+import Bottleneck from "bottleneck";
 import "dotenv/config";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import type DataClient from "../../../data/data-client";
@@ -17,6 +18,9 @@ import makeNewSocket from "./make-new-socket";
 
 class BaileysWhatsappClient implements WhatsappClient {
   public _phone: string = "";
+  private _messageQueue: Bottleneck;
+  public _reconnectAttempts: number = 0;
+  public _lastReconnectTime: number = 0;
 
   constructor(
     public sessionId: string,
@@ -25,7 +29,29 @@ class BaileysWhatsappClient implements WhatsappClient {
     public _storage: DataClient,
     public _sock: ReturnType<typeof makeWASocket>,
     public _ev: WppEventEmitter,
-  ) { }
+  ) {
+    // Configurar limitador de taxa para prevenir bloqueios do WhatsApp
+    // Limites configuráveis via variáveis de ambiente
+    const messagesPerHour = parseInt(process.env["WA_MESSAGES_PER_HOUR"] || "300", 10);
+    const minTimeBetweenMessages = parseInt(process.env["WA_MIN_TIME_BETWEEN_MESSAGES"] || "3000", 10);
+    
+    this._messageQueue = new Bottleneck({
+      reservoir: messagesPerHour, // Máximo de mensagens por hora (configurável)
+      reservoirRefreshAmount: messagesPerHour,
+      reservoirRefreshInterval: 60 * 60 * 1000, // 1 hora em ms
+      maxConcurrent: 1, // Processar uma mensagem por vez
+      minTime: minTimeBetweenMessages, // Mínimo de tempo entre mensagens (configurável)
+    });
+
+    // Log de eventos da fila para monitoramento
+    this._messageQueue.on("failed", (error) => {
+      console.error(`[Queue ${this.sessionId}] Job failed:`, error);
+    });
+
+    this._messageQueue.on("depleted", () => {
+      console.log(`[Queue ${this.sessionId}] Reservoir depleted, waiting for refresh...`);
+    });
+  }
 
   public static async build(
     sessionId: string,
@@ -103,12 +129,17 @@ class BaileysWhatsappClient implements WhatsappClient {
   public async sendMessage(props: SendMessageOptions, isGroup: boolean = false): Promise<MessageDto> {
     const processId = `send-message-${Date.now()}`;
     const logger = this.getLogger("Send Message", processId, { props, isGroup });
-    try {
-      return await handleSendMessage({ client: this, options: props, isGroup, logger });
-    } catch (error) {
-      logger.failed(error);
-      throw error;
-    }
+    
+    // Enfileirar mensagem para evitar rate limiting
+    return this._messageQueue.schedule(async () => {
+      try {
+        logger.log("Mensagem saindo da fila para processamento");
+        return await handleSendMessage({ client: this, options: props, isGroup, logger });
+      } catch (error) {
+        logger.failed(error);
+        throw error;
+      }
+    });
   }
 
   public async editMessage(props: EditMessageOptions): Promise<MessageDto> {

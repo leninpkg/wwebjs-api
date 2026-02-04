@@ -9,6 +9,7 @@
     "@types/axios": "^0.9.36",
     "axios": "^1.13.2",
     "baileys": "^7.0.0-rc.9",
+    "bottleneck": "^2.19.5",
     "dotenv": "^17.2.3",
     "express": "^4.22.1",
     "mime-types": "^3.0.2",
