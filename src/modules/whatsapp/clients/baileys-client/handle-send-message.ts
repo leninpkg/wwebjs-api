@@ -24,11 +24,6 @@ function normalizeToJid(to: string, isGroup: boolean = false): string {
   // Remove any existing suffix
   const cleanId = to.replace(/@(s\.whatsapp\.net|g\.us)/, "").trim();
 
-  // Validate it's a valid ID (only digits)
-  if (!cleanId || !/^\d+$/.test(cleanId)) {
-    throw new Error(`Invalid ${isGroup ? 'group' : 'phone'} ID format: ${to}`);
-  }
-
   // Return with appropriate suffix based on whether it's a group or individual
   return isGroup ? `${cleanId}@g.us` : `${cleanId}@s.whatsapp.net`;
 }
