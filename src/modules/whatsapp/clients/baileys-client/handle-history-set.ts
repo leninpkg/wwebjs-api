@@ -119,7 +119,7 @@ async function saveNewMessages({
       continue;
     }
 
-    if (isMessageTooOld(message, minTimestamp)) {
+    if (!message.messageTimestamp || isMessageTooOld(message.messageTimestamp, minTimestamp)) {
       skippedByDateCount++;
       continue;
     }
@@ -142,48 +142,23 @@ async function saveNewMessages({
   return { savedCount, skippedCount, skippedByDateCount };
 }
 
-export function isMessageTooOld(message: WAMessage, minTimestamp: number | null): boolean {
-  if (!minTimestamp || !message.messageTimestamp) {
+export function isMessageTooOld(timestamp: number | string | Long, minTimestamp: number | null): boolean {
+  if (!minTimestamp || !timestamp) {
     return false;
   }
 
-  let messageTimestamp = typeof message.messageTimestamp === "number"
-    ? message.messageTimestamp
-    : Number(message.messageTimestamp);
+  let normalized: number;
 
-  let normalizedMinTimestamp = minTimestamp;
-
-  // Normalizar timestamps para segundos (10 dígitos)
-  // Se timestamp tem 13+ dígitos, está em milissegundos
-  const messageTimestampStr = String(Math.floor(messageTimestamp));
-  const minTimestampStr = String(Math.floor(normalizedMinTimestamp));
-
-  // Converter para segundos se necessário
-  if (messageTimestampStr.length >= 13) {
-    messageTimestamp = Math.floor(messageTimestamp / 1000);
-    console.log(`[MSG_CHECK] Message timestamp converted from ms to s: ${messageTimestampStr} -> ${messageTimestamp}`);
+  if (typeof timestamp === "string") {
+    normalized = parseInt(timestamp.padEnd(13, "0"));
+  } else if (typeof timestamp === "number") {
+    normalized = timestamp;
+  } else {
+    // timestamp é Long
+    normalized = timestamp.toNumber();
   }
 
-  if (minTimestampStr.length >= 13) {
-    normalizedMinTimestamp = Math.floor(normalizedMinTimestamp / 1000);
-    console.log(`[MSG_CHECK] Min timestamp converted from ms to s: ${minTimestampStr} -> ${normalizedMinTimestamp}`);
-  }
-
-  // Garantir que ambos tenham o mesmo comprimento agora
-  const finalMsgStr = String(Math.floor(messageTimestamp));
-  const finalMinStr = String(Math.floor(normalizedMinTimestamp));
-
-  if (finalMsgStr.length !== finalMinStr.length) {
-    console.warn(`[MSG_CHECK] WARNING: Timestamp lengths still differ after normalization! Msg: ${finalMsgStr.length} digits, Min: ${finalMinStr.length} digits`);
-  }
-
-  const msgDate = new Date(messageTimestamp * 1000);
-  const minDate = new Date(normalizedMinTimestamp * 1000);
-  const isTooOld = messageTimestamp < normalizedMinTimestamp;
-
-  console.log(`[MSG_CHECK] ID: ${message.key.id?.substring(0, 15)}... | Msg: ${msgDate.toISOString()} (${messageTimestamp}, ${finalMsgStr.length}d) | Min: ${minDate.toISOString()} (${normalizedMinTimestamp}, ${finalMinStr.length}d) | Too old? ${isTooOld}`);
-
-  return isTooOld;
+  return normalized < minTimestamp * 1000;
 }
 
 export default handleHistorySet;
