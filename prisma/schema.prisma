@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Session {
+  id          String          @id
+  instance    String          @map("instance")
+  apiType     WhatsappApiType @map("api_type")
+  description String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@map("sessions")
+}
+
+model BaileysAuth {
+  sessionId String   @map("session_id")
+  key       String   @map("key") @db.VarChar(255)
+  value     String   @map("value")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([sessionId, key], name: "uq_baileys_data_session_id_key")
+  @@index([sessionId], name: "idx_baileys_data_session_id")
+  @@index([key], name: "idx_baileys_data_key")
+  @@map("baileys_auth")
+}
+
+model Message {
+  id          String   @id
+  instance    String
+  sessionId   String   @map("session_id")
+  messageData Json     @map("message_data")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  messageReactions  MessageReaction[]
+  parsedMessage     ParsedMessage?
+  messageSyncStatus MessageProcessingStatus?
+
+  @@map("messages")
+}
+
+model ParsedMessage {
+  messageId   String              @map("message_id")
+  sessionId   String              @map("session_id")
+  instance    String              @map("instance")
+  from        String
+  to          String
+  type        ParsedMessageType
+  quotedId    String?             @map("quoted_id")
+  body        String?             @db.Text
+  timestamp   String              @db.VarChar(20)
+  sentAt      DateTime            @map("sent_at")
+  status      ParsedMessageStatus
+  fileId      String?             @map("file_id")
+  fileName    String?             @map("file_name") @db.Text
+  fileType    String?             @map("file_type")
+  fileSize    Int?                @map("file_size")
+  isForwarded Boolean             @map("is_forwarded")
+  isEdited    Boolean             @map("is_edited")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId], name: "uq_parsed_messages_message_id")
+  @@index([sessionId], name: "idx_parsed_messages_session_id")
+  @@index([from], name: "idx_parsed_messages_from")
+  @@map("parsed_messages")
+}
+
+model MessageProcessingStatus {
+  messageId String @map("message_id")
+  sessionId String @map("session_id")
+
+  isParsed  Boolean @map("is_parsed")
+  isSaved   Boolean @map("is_saved")
+  isUpdated Boolean @map("is_updated")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId], name: "uq_message_processing_status_message_id")
+  @@map("message_processing_status")
+}
+
+model MessageReaction {
+  id        String   @id
+  messageId String   @map("message_id")
+  reaction  String
+  reactedBy String   @map("reacted_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId], name: "idx_message_reactions_message_id")
+  @@map("message_reactions")
+}
+
+enum ParsedMessageStatus {
+  PENDING
+  SENT
+  RECEIVED
+  READ
+  DOWNLOADED
+  ERROR
+  REVOKED
+}
+
+enum ParsedMessageType {
+  text
+  ptt
+  image
+  video
+  audio
+  document
+  sticker
+  list
+  location
+  contact
+  multi_contact
+  unsupported
+}
+
+enum WhatsappApiType {
+  baileys
+  wwebjs
+  gupshup
+  waba
+}
