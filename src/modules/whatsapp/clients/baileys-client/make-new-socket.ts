@@ -41,6 +41,7 @@ async function makeNewSocket(id: string, storage: DataClient) {
     browser: Browsers.windows("Google Chrome"),
     cachedGroupMetadata: async (jid) => storage.getGroupMetadata(id, jid),
     getMessage: async (key) => storage.getRawMessage(id, key),
+    syncFullHistory: process.env["BAILEYS_SYNC_FULL_HISTORY"] !== "false",
   });
 
   return socket;
