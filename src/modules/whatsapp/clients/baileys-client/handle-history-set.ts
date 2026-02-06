@@ -71,7 +71,7 @@ async function handleHistorySet({
 
   logger.log("Messages saved", { savedCount, skippedCount, skippedByDateCount });
 
-  const processedMessages = await reprocessHistoryMessages(client, messages, logger);
+  const processedMessages = await reprocessHistoryMessages(client, messages, logger, minTimestamp);
 
   await client._storage.updateLastSyncAt(client.sessionId);
   logger.log("Last sync date updated");
@@ -152,12 +152,15 @@ export function isMessageTooOld(timestamp: number | string | Long, minTimestamp:
   if (typeof timestamp === "string") {
     normalized = parseInt(timestamp.padEnd(13, "0"));
   } else if (typeof timestamp === "number") {
-    normalized = timestamp;
+    // Baileys envia timestamps em segundos (10 dígitos) — normalizar para milissegundos
+    normalized = timestamp < 1e12 ? timestamp * 1000 : timestamp;
   } else {
-    // timestamp é Long
-    normalized = timestamp.toNumber();
+    // timestamp é Long — também em segundos
+    const num = timestamp.toNumber();
+    normalized = num < 1e12 ? num * 1000 : num;
   }
 
+  // minTimestamp está em segundos, converter para milissegundos para comparar
   return normalized < minTimestamp * 1000;
 }
 

@@ -121,9 +121,7 @@ export async function reprocessHistoryMessages(
 
   for (const message of messages) {
     try {
-      const timestamp = +String(message.messageTimestamp).padEnd(13, "0")
-
-      if (minTimestamp && isMessageTooOld(timestamp, minTimestamp)) {
+      if (minTimestamp && isMessageTooOld(message.messageTimestamp!, minTimestamp)) {
         logger.log("Skipping message older than minimum timestamp", { messageId: message.key?.id });
         continue;
       }
