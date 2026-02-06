@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { ILogger } from "baileys/lib/Utils/logger";
 import DataClient from "../../../data/data-client";
 import makeWASocket, { Browsers } from "baileys";
