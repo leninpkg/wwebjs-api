@@ -1,12 +1,14 @@
-import type { WAMessage } from "baileys";
+import type { Contact, WAMessage } from "baileys";
 import "dotenv/config";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import handleMessageUpsert from "./handle-message-upsert";
+import handleContactsUpsert from "./handle-contacts-upsert";
 
 interface HistorySetContext {
   client: BaileysWhatsappClient;
   messages: WAMessage[];
+  contacts: Contact[];
   isLatest?: boolean;
   logger: ProcessingLogger;
 }
@@ -16,6 +18,7 @@ interface HistorySetContext {
  */
 async function handleHistorySet({
   client,
+  contacts,
   messages,
   isLatest,
   logger,
@@ -29,66 +32,16 @@ async function handleHistorySet({
 
   logger.log(`Filtering messages with min date: ${minDate.toISOString()} (timestamp: ${minDate.getTime()})`);
 
+  await handleContactsUpsert({
+    client,
+    contacts
+  }).catch();
   await handleMessageUpsert({
     messages,
     type: "append",
     client,
     logger
-  });
-
-  logger.success(`Finished processing history set. Total messages: ${messages.length}`);
-
-}
-
-interface SaveMessagesContext {
-  client: BaileysWhatsappClient;
-  messages: WAMessage[];
-  minTimestamp: number | null;
-  logger: ProcessingLogger;
-}
-
-interface SaveMessagesResult {
-  savedCount: number;
-  skippedCount: number;
-  skippedByDateCount: number;
-}
-
-async function saveNewMessages({
-  client,
-  messages,
-  minTimestamp,
-  logger,
-}: SaveMessagesContext): Promise<SaveMessagesResult> {
-  let savedCount = 0;
-  let skippedCount = 0;
-  let skippedByDateCount = 0;
-
-  for (const message of messages) {
-    if (!message.message || !message.key.id) {
-      continue;
-    }
-
-    if (!message.messageTimestamp || isMessageTooOld(message.messageTimestamp, minTimestamp)) {
-      skippedByDateCount++;
-      continue;
-    }
-
-    const exists = await client._storage.messageExists(client.sessionId, message.key.id);
-    if (exists) {
-      skippedCount++;
-      continue;
-    }
-
-    logger.log("Saving message from history", { messageId: message.key.id });
-    await client._storage.saveMessage({
-      sessionId: client.sessionId,
-      message: message.message,
-      key: message.key,
-    });
-    savedCount++;
-  }
-
-  return { savedCount, skippedCount, skippedByDateCount };
+  }).catch();
 }
 
 export function isMessageTooOld(timestamp: number | string | Long, minTimestamp: number | null): boolean {

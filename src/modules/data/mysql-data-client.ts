@@ -299,7 +299,7 @@ class MySQLDataClient extends DataClient {
     }
   }
 
-  public async saveLidMappings(sessionId: string, mappings: Array<{ lid: string; phoneNumber: string; contactName?: string }>): Promise<void> {
+  public async saveLidMappings(sessionId: string, mappings: Array<{ lid: string; phoneNumber: string; contactName?: string | null }>): Promise<void> {
     if (mappings.length === 0) return;
 
     try {

@@ -35,7 +35,7 @@ abstract class DataClient {
   // LID (Linked Device ID) to Phone Number mapping
   public abstract saveLidMapping(sessionId: string, lid: string, phoneNumber: string, contactName?: string): Promise<void>;
   public abstract getPhoneByLid(sessionId: string, lid: string): Promise<string | null>;
-  public abstract saveLidMappings(sessionId: string, mappings: Array<{ lid: string; phoneNumber: string; contactName?: string }>): Promise<void>;
+  public abstract saveLidMappings(sessionId: string, mappings: Array<{ lid: string; phoneNumber: string; contactName?: string | null }>): Promise<void>;
 
   // Backwards compatibility aliases
   /** @deprecated Use saveMessage instead */

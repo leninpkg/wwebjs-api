@@ -14,6 +14,7 @@ import handleMessageUpdate from "./handle-message-update";
 import handleMessageUpsert from "./handle-message-upsert";
 import handleSendMessage from "./handle-send-message";
 import makeNewSocket from "./make-new-socket";
+import handleContactsUpsert from "./handle-contacts-upsert";
 
 class BaileysWhatsappClient implements WhatsappClient {
   public _phone: string = "";
@@ -79,7 +80,7 @@ class BaileysWhatsappClient implements WhatsappClient {
   }
 
   private async onConnectionUpdate(update: Partial<ConnectionState>) {
-    const processId = `conn-update-${Date.now()}`;
+    const processId = `conn-update-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logger = this.getLogger("Connection Update", processId, update);
     try {
       await handleConnectionUpdate({ update, client: this, logger });
@@ -89,7 +90,7 @@ class BaileysWhatsappClient implements WhatsappClient {
   }
 
   private async onMessagesUpsert({ messages, type }: { messages: WAMessage[]; type: MessageUpsertType }) {
-    const processId = `messages-upsert-${Date.now()}`;
+    const processId = `messages-upsert-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logger = this.getLogger("Messages Upsert", processId, { type, messageCount: messages.length });
     try {
       await handleMessageUpsert({ messages, type, client: this, logger });
@@ -99,7 +100,7 @@ class BaileysWhatsappClient implements WhatsappClient {
   }
 
   private async onMessagesUpdate(updates: WAMessageUpdate[]) {
-    const processId = `messages-update-${Date.now()}`;
+    const processId = `messages-update-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logger = this.getLogger("Messages Update", processId, { updateCount: updates.length });
     try {
       await handleMessageUpdate({ updates, client: this, logger });
@@ -108,11 +109,11 @@ class BaileysWhatsappClient implements WhatsappClient {
     }
   }
 
-  private async onHistorySet({ messages, isLatest }: { messages: WAMessage[]; isLatest?: boolean }) {
-    const processId = `history-set-${Date.now()}`;
+  private async onHistorySet({ messages, contacts, isLatest }: { messages: WAMessage[]; contacts: Contact[]; isLatest?: boolean }) {
+    const processId = `history-set-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logger = this.getLogger("History Set", processId, { messageCount: messages.length, isLatest }, true);
     try {
-      await handleHistorySet({ client: this, messages, isLatest: !!isLatest, logger });
+      await handleHistorySet({ client: this, messages, contacts, isLatest: !!isLatest, logger });
     } catch (error) {
       logger.failed(error);
     }
@@ -124,44 +125,11 @@ class BaileysWhatsappClient implements WhatsappClient {
    * ou { id: "148309633146897@lid", phoneNumber: "5511999@s.whatsapp.net" }
    */
   private async onContactsUpsert(contacts: Contact[]) {
-    try {
-      const mappings: Array<{ lid: string; phoneNumber: string; contactName?: string }> = [];
-
-      for (const contact of contacts) {
-        const id = contact.id || "";
-        const lid = contact.lid;
-        const phoneNumber = contact.phoneNumber;
-        const name = contact.name || contact.notify || contact.verifiedName;
-
-        // Caso 1: id é um PN e tem lid
-        if (id.endsWith("@s.whatsapp.net") && lid && lid.endsWith("@lid")) {
-          mappings.push({
-            lid: lid.split("@")[0],
-            phoneNumber: id.split("@")[0],
-            contactName: name,
-          });
-        }
-        // Caso 2: id é um LID e tem phoneNumber
-        else if (id.endsWith("@lid") && phoneNumber && phoneNumber.endsWith("@s.whatsapp.net")) {
-          mappings.push({
-            lid: id.split("@")[0],
-            phoneNumber: phoneNumber.split("@")[0],
-            contactName: name,
-          });
-        }
-      }
-
-      if (mappings.length > 0) {
-        console.log(`[LID Mapping ${this.sessionId}] Saving ${mappings.length} LID mappings from contacts.upsert`);
-        await this._storage.saveLidMappings(this.sessionId, mappings);
-      }
-    } catch (error) {
-      console.error(`[LID Mapping ${this.sessionId}] Error processing contacts.upsert:`, error);
-    }
+    handleContactsUpsert({ client: this, contacts });
   }
 
   public isValidWhatsapp(phone: string): Promise<boolean> {
-    const processId = `validate-whatsapp-${Date.now()}`;
+    const processId = `validate-whatsapp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logger = this.getLogger("Validate WhatsApp", processId, { phone });
 
     logger.log(`Checking if phone number is valid WhatsApp: ${phone}`);
@@ -169,7 +137,7 @@ class BaileysWhatsappClient implements WhatsappClient {
   }
 
   public async sendMessage(props: SendMessageOptions, isGroup: boolean = false): Promise<MessageDto> {
-    const processId = `send-message-${Date.now()}`;
+    const processId = `send-message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logger = this.getLogger("Send Message", processId, { props, isGroup });
 
     // Enfileirar mensagem para evitar rate limiting
@@ -185,7 +153,7 @@ class BaileysWhatsappClient implements WhatsappClient {
   }
 
   public async editMessage(props: EditMessageOptions): Promise<MessageDto> {
-    const processId = `edit-message-${Date.now()}`;
+    const processId = `edit-message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logger = this.getLogger("Edit Message", processId, { props });
     try {
       return await handleEditMessage({ client: this, options: props, logger });
@@ -196,7 +164,7 @@ class BaileysWhatsappClient implements WhatsappClient {
   }
 
   public async getAvatarUrl(phone: string): Promise<string | null> {
-    const processId = `get-avatar-${Date.now()}`;
+    const processId = `get-avatar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const logger = this.getLogger("Get Avatar URL", processId, { phone });
 
     try {

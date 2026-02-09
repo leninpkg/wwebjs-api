@@ -1,8 +1,9 @@
+import "dotenv/config";
+
 import ExpressApi from "./api";
 import MySQLDataClient from "./modules/data/mysql-data-client";
 import HttpWppEventEmitter from "./modules/events/emitter/http-emitter";
 import BaileysWhatsappClient from "./modules/whatsapp/clients/baileys-client/baileys-whatsapp-client";
-import { config } from "dotenv";
 
 // Handlers globais para erros não capturados
 process.on('unhandledRejection', (reason, promise) => {
@@ -17,8 +18,6 @@ process.on('uncaughtException', (error) => {
 });
 
 async function runApp() {
-  config();
-
   const endpoints = process.env["WPP_EVENT_ENDPOINTS"]?.split(",");
   const mysqlHost = process.env["MYSQL_HOST"] || "localhost";
   const mysqlPort = parseInt(process.env["MYSQL_PORT"] || "3306", 10);
@@ -52,6 +51,7 @@ async function runApp() {
   }
 
   const eventEmitter = new HttpWppEventEmitter(endpoints);
+
   const dbClient = new MySQLDataClient(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
   const wppClient = await BaileysWhatsappClient.build(sessionId, clientId, instanceName, dbClient, eventEmitter);
   const api = ExpressApi.create(wppClient);
