@@ -1,6 +1,7 @@
 import { FileDirType } from "@in.pulse-crm/sdk";
 import { downloadMediaMessage, WAMessage, WAMessageKey } from "baileys";
 import ProcessingLogger from "../../../../utils/processing-logger";
+import type DataClient from "../../../data/data-client";
 import filesService from "../../../files/files.service";
 import MessageDto from "../../types";
 
@@ -12,6 +13,8 @@ interface ParseMessageParams {
   clientId: number;
   phone: string;
   logger: ProcessingLogger;
+  storage: DataClient;
+  sessionId: string;
 }
 
 interface BaseMessageContent {
@@ -33,15 +36,27 @@ interface FileMessageContent extends MessageContent {
   isFile: true;
 }
 
-async function parseMessage({ message, instance, clientId, phone, logger }: ParseMessageParams): Promise<MessageDto> {
+async function parseMessage({ message, instance, clientId, phone, logger, storage, sessionId }: ParseMessageParams): Promise<MessageDto> {
   logger.log("Parsing message", message);
   const { isFile, contactName, quotedMessageId, ...content } = getMessageContent(message, logger);
 
   const isFromMe = message.key.fromMe;
 
   logger.log("Verifying message sender info");
-  const from = getMessageFrom(message.key);
+  const from = await resolveMessageFrom(message.key, storage, sessionId, logger);
   logger.log("Message sender phone", from);
+
+  // Se a mensagem veio de um LID e conseguimos resolver o telefone, salvar o mapeamento para futuras consultas
+  const isLid = message.key.addressingMode === "lid" || message.key.remoteJid?.endsWith("@lid");
+  if (isLid && from.phone) {
+    const lidId = message.key.remoteJid?.split("@")[0] || "";
+    if (lidId && from.phone !== lidId) {
+      storage.saveLidMapping(sessionId, lidId, from.phone, contactName).catch((err) => {
+        logger.log(`Failed to save LID mapping (non-blocking): ${err}`);
+      });
+    }
+  }
+
   logger.log("Verifying if message is forwarded");
   const isForwarded = getIsForwarded(message);
   logger.log("Is message forwarded", isForwarded);
@@ -331,7 +346,7 @@ function getMessageContactName(message: WAMessage) {
 
 function getMessageFrom(key: WAMessageKey) {
   const isGroup = key.remoteJid?.includes("@g.us");
-  const isLid = key.addressingMode === "lid";
+  const isLid = key.addressingMode === "lid" || key.remoteJid?.endsWith("@lid");
 
   if (isGroup) {
     const participant = key.participant || "";
@@ -344,13 +359,87 @@ function getMessageFrom(key: WAMessageKey) {
       groupId: key.remoteJid?.replace("@g.us", "") || "",
     };
   }
+  
+  // Para LID, tentar usar jidAlt (número real)
+  if (isLid) {
+    const jidAlt = key.remoteJidAlt || "";
+    const phone = jidAlt.split("@")[0] || "";
+    return {
+      phone,
+      isGroup: false,
+      lid: key.remoteJid?.split("@")[0] || "",
+    };
+  }
+
+  // Para JID normal (não-LID), extrair do remoteJid
   const jid = key.remoteJid || "";
-  const jidAlt = key.remoteJidAlt || jid;
-  const phone = isLid ? jidAlt.split("@")[0] : jid.split("@")[0];
+  const phone = jid.split("@")[0];
 
   return {
     phone: phone || key.remoteJid || "",
     isGroup: false,
+  };
+}
+
+/**
+ * Resolve o remetente de uma mensagem, buscando o telefone real quando for um LID.
+ * Fluxo:
+ * 1. Tenta extrair do key (remoteJidAlt, participantAlt)
+ * 2. Se for LID sem telefone, consulta o banco de dados (lid_mapping)
+ * 3. Se não encontrar, loga o problema e retorna o LID como fallback
+ */
+async function resolveMessageFrom(
+  key: WAMessageKey,
+  storage: DataClient,
+  sessionId: string,
+  logger: ProcessingLogger
+): Promise<{ phone: string; isGroup: boolean; groupId?: string }> {
+  const result = getMessageFrom(key);
+
+  // Se já tem telefone válido (não é LID), retorna direto
+  if (result.phone && !result.phone.match(/^\d+$/) === false) {
+    // Verificar se o telefone parece um número de telefone real (não um LID)
+    // LIDs são números muito grandes sem código de país válido, mas não há forma 100% segura de distinguir
+    // A melhor forma é checar se veio de um @lid
+  }
+
+  const isLid = key.addressingMode === "lid" || key.remoteJid?.endsWith("@lid");
+  
+  // Se não é LID ou já tem telefone, retorna
+  if (!isLid || (result.phone && result.phone.length > 0)) {
+    return result;
+  }
+
+  // É LID sem telefone - precisamos resolver
+  const lidId = (result as any).lid || key.remoteJid?.split("@")[0] || "";
+  
+  if (!lidId) {
+    logger.log("LID message without LID identifier, cannot resolve phone");
+    return result;
+  }
+
+  logger.log(`Resolving LID to phone number: ${lidId}`);
+
+  // 1. Consultar banco de dados local
+  try {
+    const phoneFromDb = await storage.getPhoneByLid(sessionId, lidId);
+    if (phoneFromDb) {
+      logger.log(`LID ${lidId} resolved from database: ${phoneFromDb}`);
+      return {
+        ...result,
+        phone: phoneFromDb,
+      };
+    }
+  } catch (error) {
+    logger.log(`Error querying LID mapping from database: ${error}`);
+  }
+
+  // 2. Não encontrou - retorna o LID como fallback e loga o aviso
+  logger.log(`WARNING: Could not resolve LID ${lidId} to a phone number. remoteJidAlt was empty and no mapping found in database.`);
+  
+  return {
+    ...result,
+    phone: result.phone || lidId,
   };
 }
 

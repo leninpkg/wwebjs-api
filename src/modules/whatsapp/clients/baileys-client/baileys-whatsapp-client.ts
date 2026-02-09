@@ -1,4 +1,4 @@
-import makeWASocket, { MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
+import makeWASocket, { type Contact, MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
 import Bottleneck from "bottleneck";
 import "dotenv/config";
 import ProcessingLogger from "../../../../utils/processing-logger";
@@ -9,7 +9,6 @@ import type { EditMessageOptions, FetchMessageHistoryOptions, FetchMessageHistor
 import WhatsappClient from "../whatsapp-client";
 import handleConnectionUpdate from "./handle-connection-update";
 import handleEditMessage from "./handle-edit-message";
-import handleFetchMessageHistory from "./handle-fetch-message-history";
 import handleHistorySet from "./handle-history-set";
 import handleMessageUpdate from "./handle-message-update";
 import handleMessageUpsert from "./handle-message-upsert";
@@ -34,7 +33,7 @@ class BaileysWhatsappClient implements WhatsappClient {
     // Limites configuráveis via variáveis de ambiente
     const messagesPerHour = parseInt(process.env["WA_MESSAGES_PER_HOUR"] || "300", 10);
     const minTimeBetweenMessages = parseInt(process.env["WA_MIN_TIME_BETWEEN_MESSAGES"] || "3000", 10);
-    
+
     this._messageQueue = new Bottleneck({
       reservoir: messagesPerHour, // Máximo de mensagens por hora (configurável)
       reservoirRefreshAmount: messagesPerHour,
@@ -72,6 +71,7 @@ class BaileysWhatsappClient implements WhatsappClient {
     this._sock.ev.on("messages.upsert", this.onMessagesUpsert.bind(this));
     this._sock.ev.on("messages.update", this.onMessagesUpdate.bind(this));
     this._sock.ev.on("messaging-history.set", this.onHistorySet.bind(this));
+    this._sock.ev.on("contacts.upsert", this.onContactsUpsert.bind(this));
   }
 
   private getLogger(processName: string, processId: string, input: unknown, debug: boolean = false): ProcessingLogger {
@@ -118,6 +118,48 @@ class BaileysWhatsappClient implements WhatsappClient {
     }
   }
 
+  /**
+   * Captura o evento contacts.upsert da Baileys para armazenar mapeamentos LID -> Phone Number.
+   * Contatos podem vir com { id: "5511999@s.whatsapp.net", lid: "148309633146897@lid" }
+   * ou { id: "148309633146897@lid", phoneNumber: "5511999@s.whatsapp.net" }
+   */
+  private async onContactsUpsert(contacts: Contact[]) {
+    try {
+      const mappings: Array<{ lid: string; phoneNumber: string; contactName?: string }> = [];
+
+      for (const contact of contacts) {
+        const id = contact.id || "";
+        const lid = contact.lid;
+        const phoneNumber = contact.phoneNumber;
+        const name = contact.name || contact.notify || contact.verifiedName;
+
+        // Caso 1: id é um PN e tem lid
+        if (id.endsWith("@s.whatsapp.net") && lid && lid.endsWith("@lid")) {
+          mappings.push({
+            lid: lid.split("@")[0],
+            phoneNumber: id.split("@")[0],
+            contactName: name,
+          });
+        }
+        // Caso 2: id é um LID e tem phoneNumber
+        else if (id.endsWith("@lid") && phoneNumber && phoneNumber.endsWith("@s.whatsapp.net")) {
+          mappings.push({
+            lid: id.split("@")[0],
+            phoneNumber: phoneNumber.split("@")[0],
+            contactName: name,
+          });
+        }
+      }
+
+      if (mappings.length > 0) {
+        console.log(`[LID Mapping ${this.sessionId}] Saving ${mappings.length} LID mappings from contacts.upsert`);
+        await this._storage.saveLidMappings(this.sessionId, mappings);
+      }
+    } catch (error) {
+      console.error(`[LID Mapping ${this.sessionId}] Error processing contacts.upsert:`, error);
+    }
+  }
+
   public isValidWhatsapp(phone: string): Promise<boolean> {
     const processId = `validate-whatsapp-${Date.now()}`;
     const logger = this.getLogger("Validate WhatsApp", processId, { phone });
@@ -129,7 +171,7 @@ class BaileysWhatsappClient implements WhatsappClient {
   public async sendMessage(props: SendMessageOptions, isGroup: boolean = false): Promise<MessageDto> {
     const processId = `send-message-${Date.now()}`;
     const logger = this.getLogger("Send Message", processId, { props, isGroup });
-    
+
     // Enfileirar mensagem para evitar rate limiting
     return this._messageQueue.schedule(async () => {
       try {
@@ -147,17 +189,6 @@ class BaileysWhatsappClient implements WhatsappClient {
     const logger = this.getLogger("Edit Message", processId, { props });
     try {
       return await handleEditMessage({ client: this, options: props, logger });
-    } catch (error) {
-      logger.failed(error);
-      throw error;
-    }
-  }
-
-  public async fetchMessageHistory(options: FetchMessageHistoryOptions): Promise<FetchMessageHistoryResult> {
-    const processId = `fetch-history-${Date.now()}`;
-    const logger = this.getLogger("Fetch Message History", processId, { options });
-    try {
-      return await handleFetchMessageHistory({ client: this, options, logger });
     } catch (error) {
       logger.failed(error);
       throw error;

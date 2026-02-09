@@ -63,40 +63,73 @@ async function handleConnectionUpdate({ update, client, logger }: ConnectionUpda
 
   const errStatusCode = (update.lastDisconnect?.error as any)?.output?.statusCode;
   const isRestartRequired = errStatusCode === DisconnectReason.restartRequired;
+  const isLoggedOut = errStatusCode === DisconnectReason.loggedOut;
 
-  if (update.connection === "close" && isRestartRequired) {
-    // Resetar contador se passou tempo suficiente
-    if (shouldResetAttempts(client._lastReconnectTime)) {
+  if (update.connection === "close") {
+    logger.log(`Connection closed. Status code: ${errStatusCode}, Reason: ${isRestartRequired ? 'restart required' : isLoggedOut ? 'logged out / device removed' : 'unknown'}`);
+
+    if (isRestartRequired) {
+      // Resetar contador se passou tempo suficiente
+      if (shouldResetAttempts(client._lastReconnectTime)) {
+        client._reconnectAttempts = 0;
+        logger.log("Reset de contador de reconexão (passou tempo suficiente)");
+      }
+
+      // Calcular delay com backoff exponencial
+      const delay = calculateReconnectDelay(client._reconnectAttempts);
+      logger.log(`Socket restart required. Tentativa ${client._reconnectAttempts + 1}, aguardando ${delay}ms antes de reconectar...`);
+
+      await sleep(delay);
+
+      client._reconnectAttempts++;
+      client._lastReconnectTime = Date.now();
+
+      logger.log("Reinicializando socket...");
+      client._sock = await makeNewSocket(client.sessionId, client._storage);
+      client.bindEvents();
+      logger.log("Socket reinicializado com sucesso");
+    } else if (isLoggedOut) {
+      // Device removed / logged out - precisa limpar estado e gerar novo QR
+      logger.log("Device removed or logged out detected. Clearing auth state...");
+      
+      await client._storage.clearAuthState(client.sessionId);
+      logger.log("Auth state cleared successfully");
+
+      // Emitir evento de logout
+/*       client._ev.emit({
+        type: "auth-logout",
+        clientId: client.clientId,
+        reason: "device_removed",
+      }); */
+
+      // Resetar contadores
       client._reconnectAttempts = 0;
-      logger.log("Reset de contador de reconexão (passou tempo suficiente)");
+      client._lastReconnectTime = 0;
+
+      // Aguardar um pouco antes de reinicializar
+      const delay = 3000;
+      logger.log(`Aguardando ${delay}ms antes de reinicializar e gerar novo QR code...`);
+      await sleep(delay);
+
+      logger.log("Reinicializando socket para gerar novo QR code...");
+      client._sock = await makeNewSocket(client.sessionId, client._storage);
+      client.bindEvents();
+      logger.log("Socket reinicializado - aguardando geração de QR code");
+    } else {
+      // Outros tipos de desconexão
+      logger.log(`Unhandled disconnection. Status code: ${errStatusCode}. Clearing auth state...`);
+      
+      await client._storage.clearAuthState(client.sessionId);
+      logger.log("Auth state cleared");
+
+      const delay = 5000;
+      logger.log(`Aguardando ${delay}ms antes de reinicializar...`);
+      await sleep(delay);
+
+      client._sock = await makeNewSocket(client.sessionId, client._storage);
+      client.bindEvents();
+      logger.log("Socket reinitialized after unknown disconnection");
     }
-
-    // Calcular delay com backoff exponencial
-    const delay = calculateReconnectDelay(client._reconnectAttempts);
-    logger.log(`Socket restart required. Tentativa ${client._reconnectAttempts + 1}, aguardando ${delay}ms antes de reconectar...`);
-
-    await sleep(delay);
-
-    client._reconnectAttempts++;
-    client._lastReconnectTime = Date.now();
-
-    logger.log("Reinicializando socket...");
-    client._sock = await makeNewSocket(client.sessionId, client._storage);
-    client.bindEvents();
-    logger.log("Socket reinicializado com sucesso");
-  }
-  if (update.connection === "close" && !isRestartRequired) {
-    client._storage.clearAuthState(client.sessionId);
-    logger.log("Logged out, cleared auth state from storage");
-
-    // Aplicar delay também no logout para evitar reconexão agressiva
-    const delay = 5000;
-    logger.log(`Aguardando ${delay}ms antes de reinicializar após logout...`);
-    await sleep(delay);
-
-    client._sock = await makeNewSocket(client.sessionId, client._storage);
-    client.bindEvents();
-    logger.log("Socket reinitialized after logout");
   }
 }
 

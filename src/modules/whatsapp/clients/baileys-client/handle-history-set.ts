@@ -1,41 +1,14 @@
 import type { WAMessage } from "baileys";
+import "dotenv/config";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
-import { reprocessHistoryMessages } from "./handle-fetch-message-history";
-import "dotenv/config";
-import { Logger } from "@in.pulse-crm/utils";
-
-// Data mínima para sincronização de histórico
-const HISTORY_MIN_DATE = getHistoryMinDate();
-
-function getHistoryMinDate(): number {
-  if (process.env["HISTORY_MIN_DATE"]) {
-    const envDate = process.env["HISTORY_MIN_DATE"];
-    const parsedDate = new Date(envDate);
-    const timestamp = Math.floor(parsedDate.getTime() / 1000);
-    console.log(`[HISTORY_MIN_DATE] Env value: "${envDate}" → Parsed: ${parsedDate.toISOString()} → Timestamp (seconds): ${timestamp}`);
-    return timestamp;
-  }
-
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const timestamp = Math.floor(sevenDaysAgo.getTime() / 1000);
-  console.log(`[HISTORY_MIN_DATE] Using default (7 days ago): ${sevenDaysAgo.toISOString()} → Timestamp: ${timestamp}`);
-  return timestamp;
-}
+import handleMessageUpsert from "./handle-message-upsert";
 
 interface HistorySetContext {
   client: BaileysWhatsappClient;
   messages: WAMessage[];
   isLatest?: boolean;
   logger: ProcessingLogger;
-}
-
-interface HistorySetResult {
-  savedCount: number;
-  skippedCount: number;
-  skippedByDateCount: number;
-  processedCount: number;
 }
 
 /**
@@ -46,49 +19,25 @@ async function handleHistorySet({
   messages,
   isLatest,
   logger,
-}: HistorySetContext): Promise<HistorySetResult> {
+}: HistorySetContext) {
   logger.log("Received messaging history set", { messageCount: messages.length, isLatest });
 
-  const minTimestamp = HISTORY_MIN_DATE;
-  const minDate = new Date(minTimestamp * 1000);
-  logger.log("Filtering messages", {
-    minTimestamp,
-    minDateISO: minDate.toISOString(),
-    minDateLocal: minDate.toLocaleString(),
-    envValue: process.env["HISTORY_MIN_DATE"]
-  });
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const envMinDate = process.env["HISTORY_MIN_DATE"];
+  const minDate = envMinDate ? new Date(envMinDate) : sevenDaysAgo;
 
-  Logger.debug("[HISTORY] Starting to save new messages from history", {
-    minDate: minDate.toLocaleString()
-  });
+  logger.log(`Filtering messages with min date: ${minDate.toISOString()} (timestamp: ${minDate.getTime()})`);
 
-  const { savedCount, skippedCount, skippedByDateCount } = await saveNewMessages({
-    client,
+  await handleMessageUpsert({
     messages,
-    minTimestamp,
-    logger,
+    type: "append",
+    client,
+    logger
   });
 
-  logger.log("Messages saved", { savedCount, skippedCount, skippedByDateCount });
+  logger.success(`Finished processing history set. Total messages: ${messages.length}`);
 
-  const processedMessages = await reprocessHistoryMessages(client, messages, logger, minTimestamp);
-
-  await client._storage.updateLastSyncAt(client.sessionId);
-  logger.log("Last sync date updated");
-
-  logger.success({
-    savedMessages: savedCount,
-    skippedMessages: skippedCount,
-    skippedByDate: skippedByDateCount,
-    processedMessages: processedMessages.length,
-  });
-
-  return {
-    savedCount,
-    skippedCount,
-    skippedByDateCount,
-    processedCount: processedMessages.length,
-  };
 }
 
 interface SaveMessagesContext {

@@ -88,3 +88,20 @@ CREATE TABLE IF NOT EXISTS group_metadata (
     INDEX idx_jid (jid),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- Schema para a tabela lid_mapping (mapeamento LID -> número de telefone real)
+-- O protocolo WhatsApp agora usa LIDs (Linked Device IDs) em vez de números de telefone em alguns casos.
+CREATE TABLE IF NOT EXISTS lid_mapping (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    session_id VARCHAR(255) NOT NULL,
+    lid VARCHAR(255) NOT NULL COMMENT 'Linked Device ID (e.g., 148309633146897)',
+    phone_number VARCHAR(255) NOT NULL COMMENT 'Phone number (e.g., 5511999999999)',
+    contact_name VARCHAR(255) NULL COMMENT 'Contact name if available',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_lid_mapping (session_id, lid),
+    INDEX idx_session_id (session_id),
+    INDEX idx_lid (lid),
+    INDEX idx_phone_number (phone_number),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;

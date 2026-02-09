@@ -260,6 +260,67 @@ class MySQLDataClient extends DataClient {
     const [rows] = await this.pool.query<RowDataPacket[]>(query, params);
     return rows as T[];
   }
+
+  public async saveLidMapping(sessionId: string, lid: string, phoneNumber: string, contactName?: string): Promise<void> {
+    try {
+      const query = `
+        INSERT INTO lid_mapping (session_id, lid, phone_number, contact_name, created_at)
+        VALUES (?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE
+          phone_number = VALUES(phone_number),
+          contact_name = COALESCE(VALUES(contact_name), contact_name),
+          updated_at = NOW()
+      `;
+      await this.pool.query(query, [sessionId, lid, phoneNumber, contactName || null]);
+    } catch (error: any) {
+      if (error.code !== 'ER_NO_SUCH_TABLE') {
+        Logger.error("Error saving LID mapping", error);
+      }
+    }
+  }
+
+  public async getPhoneByLid(sessionId: string, lid: string): Promise<string | null> {
+    try {
+      const query = "SELECT phone_number FROM lid_mapping WHERE lid = ? AND session_id = ? LIMIT 1";
+      const [rows] = await this.pool.query<RowDataPacket[]>(query, [lid, sessionId]);
+
+      if (rows[0]) {
+        return rows[0]["phone_number"] as string;
+      }
+
+      return null;
+    } catch (error: any) {
+      if (error.code === 'ER_NO_SUCH_TABLE') {
+        Logger.info("Table 'lid_mapping' does not exist. Consider running migration 004_add_lid_mapping_table.sql");
+      } else {
+        Logger.error("Error fetching LID mapping", error);
+      }
+      return null;
+    }
+  }
+
+  public async saveLidMappings(sessionId: string, mappings: Array<{ lid: string; phoneNumber: string; contactName?: string }>): Promise<void> {
+    if (mappings.length === 0) return;
+
+    try {
+      const query = `
+        INSERT INTO lid_mapping (session_id, lid, phone_number, contact_name, created_at)
+        VALUES ?
+        ON DUPLICATE KEY UPDATE
+          phone_number = VALUES(phone_number),
+          contact_name = COALESCE(VALUES(contact_name), contact_name),
+          updated_at = NOW()
+      `;
+
+      const values = mappings.map(m => [sessionId, m.lid, m.phoneNumber, m.contactName || null, new Date()]);
+      await this.pool.query(query, [values]);
+      Logger.info(`Saved ${mappings.length} LID mappings for session ${sessionId}`);
+    } catch (error: any) {
+      if (error.code !== 'ER_NO_SUCH_TABLE') {
+        Logger.error("Error saving LID mappings in batch", error);
+      }
+    }
+  }
 }
 
 export default MySQLDataClient;

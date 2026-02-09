@@ -12,6 +12,12 @@ export interface AuthSuccessEvent {
   phoneNumber: string;
 }
 
+export interface AuthLogoutEvent {
+  type: "auth-logout";
+  clientId: number;
+  reason?: string;
+}
+
 export interface MessageReceivedEvent {
   type: "message-received";
   clientId: number;
@@ -26,4 +32,4 @@ export interface MessageStatusReceivedEvent {
   timestamp: number;
 }
 
-export type WppEvent = QRReceivedEvent | AuthSuccessEvent | MessageReceivedEvent | MessageStatusReceivedEvent;
+export type WppEvent = QRReceivedEvent | AuthSuccessEvent | AuthLogoutEvent | MessageReceivedEvent | MessageStatusReceivedEvent;

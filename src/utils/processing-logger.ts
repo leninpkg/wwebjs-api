@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { Logger, sanitizeErrorMessage } from "@in.pulse-crm/utils";
 import DataClient from "../modules/data/data-client";
 
@@ -22,7 +23,7 @@ export default class ProcessingLogger {
     private readonly processId: string,
     private readonly input: unknown,
     private displayOnTerminal: boolean = false,
-  ) {}
+  ) { }
 
   public log(message: string, data?: unknown): void {
     this.logEntries.push({
@@ -49,10 +50,12 @@ export default class ProcessingLogger {
     });
 
     // Também exibe no console para debugging em tempo real
-    if (data !== undefined) {
-      console.log(`[DEBUG] ${message}`, data);
-    } else {
-      console.log(`[DEBUG] ${message}`);
+    if (process.env["LOG_LEVEL"] === "debug") {
+      if (data !== undefined) {
+        console.log(`[DEBUG] ${message}`, data);
+      } else {
+        console.log(`[DEBUG] ${message}`);
+      }
     }
   }
 

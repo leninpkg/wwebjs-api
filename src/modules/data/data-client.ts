@@ -32,6 +32,11 @@ abstract class DataClient {
   public abstract clearAuthState(sessionId: string): Promise<void>;
   public abstract unsafeQuery<T>(query: string, params?: any[]): Promise<T[]>;
 
+  // LID (Linked Device ID) to Phone Number mapping
+  public abstract saveLidMapping(sessionId: string, lid: string, phoneNumber: string, contactName?: string): Promise<void>;
+  public abstract getPhoneByLid(sessionId: string, lid: string): Promise<string | null>;
+  public abstract saveLidMappings(sessionId: string, mappings: Array<{ lid: string; phoneNumber: string; contactName?: string }>): Promise<void>;
+
   // Backwards compatibility aliases
   /** @deprecated Use saveMessage instead */
   public async saveRawMessage(sessionId: string, message: proto.IMessage, key: WAMessageKey): Promise<void> {
