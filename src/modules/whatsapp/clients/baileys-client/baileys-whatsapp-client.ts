@@ -31,16 +31,16 @@ class BaileysWhatsappClient implements WhatsappClient {
     public _ev: WppEventEmitter,
   ) {
     // Configurar limitador de taxa para prevenir bloqueios do WhatsApp
-    // Limites configuráveis via variáveis de ambiente
+    // Usa as mesmas configurações de humanização (MESSAGE_MIN_DELAY)
     const messagesPerHour = parseInt(process.env["WA_MESSAGES_PER_HOUR"] || "300", 10);
-    const minTimeBetweenMessages = parseInt(process.env["WA_MIN_TIME_BETWEEN_MESSAGES"] || "3000", 10);
+    const minTimeBetweenMessages = parseInt(process.env["MESSAGE_MIN_DELAY"] || "3000", 10);
 
     this._messageQueue = new Bottleneck({
       reservoir: messagesPerHour, // Máximo de mensagens por hora (configurável)
       reservoirRefreshAmount: messagesPerHour,
       reservoirRefreshInterval: 60 * 60 * 1000, // 1 hora em ms
       maxConcurrent: 1, // Processar uma mensagem por vez
-      minTime: minTimeBetweenMessages, // Mínimo de tempo entre mensagens (configurável)
+      minTime: minTimeBetweenMessages, // Intervalo mínimo entre mensagens
     });
 
     // Log de eventos da fila para monitoramento

@@ -54,10 +54,14 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
     const messageText = options.text || "";
 
     if (messageText) {
+      // Valores de delay (ms por caractere): valores maiores = digitação mais lenta
+      const minDelayPerChar = parseInt(process.env["TYPING_MIN_DELAY_PER_CHAR"] || "30", 10);
+      const maxDelayPerChar = parseInt(process.env["TYPING_MAX_DELAY_PER_CHAR"] || "60", 10);
+
       const typingDuration = calculateTypingDuration({
         messageLength: messageText.length,
-        minSpeed: 30, // ms por caractere
-        maxSpeed: 60, // ms por caractere
+        minDelay: minDelayPerChar, // Digitação mais rápida
+        maxDelay: maxDelayPerChar, // Digitação mais lenta
       });
 
       logger.debug(`Simulando digitação por ${typingDuration}ms`);
@@ -97,11 +101,6 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
       sessionId: client.sessionId,
       sock: client._sock,
     });
-
-    // Adicionar delay aleatório entre 3-8 segundos para simular comportamento humano
-    const randomDelay = Math.floor(Math.random() * 5000) + 3000; // 3000-8000ms
-    logger.debug(`Aguardando ${randomDelay}ms antes da próxima mensagem (comportamento humanizado)`);
-    await sleep(randomDelay);
 
     Logger.debug("Mensagem parseada com sucesso", parsedMessage);
     logger.success(parsedMessage);

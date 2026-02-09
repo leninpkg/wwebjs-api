@@ -1,13 +1,13 @@
 interface CalculateTypingDurationParams {
   messageLength: number;
-  minSpeed: number; // in milliseconds per character
-  maxSpeed: number; // in milliseconds per character
+  minDelay: number; // in milliseconds per character
+  maxDelay: number; // in milliseconds per character
 }
 
-function calculateTypingDuration({ messageLength, minSpeed, maxSpeed }: CalculateTypingDurationParams): number {
+function calculateTypingDuration({ messageLength, minDelay, maxDelay }: CalculateTypingDurationParams): number {
   const seed = Math.random();
-  const speedRange = maxSpeed - minSpeed;
-  const randomSpeed = minSpeed + seed * speedRange;
+  const speedRange = maxDelay - minDelay;
+  const randomSpeed = minDelay + seed * speedRange;
   const typingTime = messageLength * randomSpeed;
 
   return typingTime;
