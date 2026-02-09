@@ -78,9 +78,26 @@ async function parseMessage({ message, instance, clientId, phone, logger, storag
 
   if (isFile) {
     logger.log("Processing file message", { fileName: (content as FileMessageContent).fileName });
-    const uploadedFile = await processMediaFile(instance, message, content as FileMessageContent, logger);
-    logger.log("Uploaded file", uploadedFile);
-    return { ...parsedMessage, fileId: uploadedFile.id };
+    try {
+      const uploadedFile = await processMediaFile(instance, message, content as FileMessageContent, logger);
+      logger.log("Uploaded file", uploadedFile);
+      return { ...parsedMessage, fileId: uploadedFile.id };
+    } catch (error: any) {
+      const statusCode = error?.output?.statusCode || error?.statusCode || error?.status;
+      logger.log(`Failed to download/upload media after retries (status: ${statusCode || 'unknown'})`, {
+        messageId: message.key.id,
+        fileName: (content as FileMessageContent).fileName,
+        error: error?.message || String(error),
+      });
+
+      // Return the message without the file so it's not lost entirely
+      return {
+        ...parsedMessage,
+        body: parsedMessage.body
+          ? `${parsedMessage.body}\n⚠️ Não foi possível baixar o arquivo: ${(content as FileMessageContent).fileName}`
+          : `⚠️ Não foi possível baixar o arquivo: ${(content as FileMessageContent).fileName}`,
+      };
+    }
   }
 
   return parsedMessage;
@@ -451,13 +468,15 @@ function getMessageQuotedId(message: WAMessage): string | null {
   return message.message?.extendedTextMessage?.contextInfo?.stanzaId || null;
 }
 
+const MEDIA_DOWNLOAD_MAX_RETRIES = 3;
+const MEDIA_DOWNLOAD_BASE_DELAY_MS = 2000;
+
 async function processMediaFile(instance: string, message: WAMessage, content: FileMessageContent, logger: ProcessingLogger) {
   logger.debug("Downloading media message", { fileName: content.fileName, fileSize: content.fileSize });
 
-  const mediaBuffer = await downloadMediaMessage(message, "buffer", {});
+  const mediaBuffer = await downloadMediaWithRetry(message, logger);
 
   logger.debug("Media downloaded, uploading to storage", { bufferSize: mediaBuffer.length });
-
 
   const uploadedFile = await filesService.uploadFile({
     buffer: mediaBuffer,
@@ -470,6 +489,31 @@ async function processMediaFile(instance: string, message: WAMessage, content: F
   logger.debug("Media uploaded", { fileId: uploadedFile.id });
 
   return uploadedFile;
+}
+
+async function downloadMediaWithRetry(message: WAMessage, logger: ProcessingLogger): Promise<Buffer> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MEDIA_DOWNLOAD_MAX_RETRIES; attempt++) {
+    try {
+      const buffer = await downloadMediaMessage(message, "buffer", {});
+      return buffer as Buffer;
+    } catch (error: any) {
+      lastError = error;
+      const statusCode = error?.output?.statusCode || error?.statusCode || error?.status;
+      logger.log(`Media download attempt ${attempt}/${MEDIA_DOWNLOAD_MAX_RETRIES} failed (status: ${statusCode || 'unknown'})`, {
+        error: error?.message || String(error),
+      });
+
+      if (attempt < MEDIA_DOWNLOAD_MAX_RETRIES) {
+        const delay = MEDIA_DOWNLOAD_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        logger.log(`Retrying media download in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 export default parseMessage;
