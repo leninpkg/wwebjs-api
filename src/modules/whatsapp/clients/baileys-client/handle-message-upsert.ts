@@ -43,7 +43,7 @@ async function handleMessageUpsert({ messages, type, client, logger }: MessageUp
     const skipOldMsg = message.messageTimestamp && isMessageTooOld(message.messageTimestamp, HISTORY_MIN_DATE)
     const msgDate = message.messageTimestamp ? new Date(+message.messageTimestamp * 1000) : null;
     const initBody = message.message?.conversation || message.message?.extendedTextMessage?.text || "unknown";
-    
+
     console.log(`Recebendo mensagem | De: ${message.key.remoteJid} | Data: ${msgDate?.toDateString()} | Tipo: ${type} | SkippOldMsg: ${skipOldMsg} | Conteúdo: ${initBody}`);
 
     if (skipOldMsg) {
@@ -118,6 +118,7 @@ async function handleMessageUpsert({ messages, type, client, logger }: MessageUp
           logger,
           storage: client._storage,
           sessionId: client.sessionId,
+          sock: client._sock,
         });
 
         logger.log("Message parsed successfully", { parsedMessage });

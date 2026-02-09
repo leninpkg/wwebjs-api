@@ -70,6 +70,7 @@ async function handleEditMessage({ client, options, logger }: EditMessageContext
     logger,
     storage: client._storage,
     sessionId: client.sessionId,
+    sock: client._sock,
   });
   logger.success(`Parsed edited message for message ID ${options.messageId} successfully`);
   return parsedMessage;

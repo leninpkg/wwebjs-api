@@ -1,9 +1,11 @@
 import { FileDirType } from "@in.pulse-crm/sdk";
-import { downloadMediaMessage, WAMessage, WAMessageKey } from "baileys";
+import makeWASocket, { downloadMediaMessage, WAMessage, WAMessageKey } from "baileys";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import type DataClient from "../../../data/data-client";
 import filesService from "../../../files/files.service";
 import MessageDto from "../../types";
+
+type WASocket = ReturnType<typeof makeWASocket>;
 
 type MessageType = "chat" | "image" | "video" | "audio" | "document" | "sticker" | "contact" | "location" | "call" | "unsupported";
 
@@ -15,6 +17,7 @@ interface ParseMessageParams {
   logger: ProcessingLogger;
   storage: DataClient;
   sessionId: string;
+  sock: WASocket;
 }
 
 interface BaseMessageContent {
@@ -36,7 +39,7 @@ interface FileMessageContent extends MessageContent {
   isFile: true;
 }
 
-async function parseMessage({ message, instance, clientId, phone, logger, storage, sessionId }: ParseMessageParams): Promise<MessageDto> {
+async function parseMessage({ message, instance, clientId, phone, logger, storage, sessionId, sock }: ParseMessageParams): Promise<MessageDto> {
   logger.log("Parsing message");
   const { isFile, contactName, quotedMessageId, ...content } = getMessageContent(message, logger);
 
@@ -79,7 +82,7 @@ async function parseMessage({ message, instance, clientId, phone, logger, storag
   if (isFile) {
     logger.log("Processing file message", { fileName: (content as FileMessageContent).fileName });
     try {
-      const uploadedFile = await processMediaFile(instance, message, content as FileMessageContent, logger);
+      const uploadedFile = await processMediaFile(instance, message, content as FileMessageContent, logger, sock);
       logger.log("Uploaded file", uploadedFile);
       return { ...parsedMessage, fileId: uploadedFile.id };
     } catch (error: any) {
@@ -471,10 +474,10 @@ function getMessageQuotedId(message: WAMessage): string | null {
 const MEDIA_DOWNLOAD_MAX_RETRIES = 3;
 const MEDIA_DOWNLOAD_BASE_DELAY_MS = 2000;
 
-async function processMediaFile(instance: string, message: WAMessage, content: FileMessageContent, logger: ProcessingLogger) {
+async function processMediaFile(instance: string, message: WAMessage, content: FileMessageContent, logger: ProcessingLogger, sock: WASocket) {
   logger.debug("Downloading media message", { fileName: content.fileName, fileSize: content.fileSize });
 
-  const mediaBuffer = await downloadMediaWithRetry(message, logger);
+  const mediaBuffer = await downloadMediaWithRetry(message, logger, sock);
 
   logger.debug("Media downloaded, uploading to storage", { bufferSize: mediaBuffer.length });
 
@@ -491,12 +494,15 @@ async function processMediaFile(instance: string, message: WAMessage, content: F
   return uploadedFile;
 }
 
-async function downloadMediaWithRetry(message: WAMessage, logger: ProcessingLogger): Promise<Buffer> {
+async function downloadMediaWithRetry(message: WAMessage, logger: ProcessingLogger, sock: WASocket): Promise<Buffer> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= MEDIA_DOWNLOAD_MAX_RETRIES; attempt++) {
     try {
-      const buffer = await downloadMediaMessage(message, "buffer", {});
+      const buffer = await downloadMediaMessage(message, "buffer", {}, {
+        reuploadRequest: sock.updateMediaMessage,
+        logger: logger as any,
+      });
       return buffer as Buffer;
     } catch (error: any) {
       lastError = error;

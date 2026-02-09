@@ -95,6 +95,7 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
       logger,
       storage: client._storage,
       sessionId: client.sessionId,
+      sock: client._sock,
     });
 
     // Adicionar delay aleatório entre 3-8 segundos para simular comportamento humano
