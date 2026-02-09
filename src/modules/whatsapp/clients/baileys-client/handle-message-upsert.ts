@@ -32,7 +32,7 @@ interface MessageUpsertContext {
 }
 
 async function handleMessageUpsert({ messages, type, client, logger }: MessageUpsertContext) {
-  logger.log(`Received messages upsert of type ${type}`, { messageCount: messages.length });
+  logger.log(`Received messages upsert of type ${type} | Message count: ${messages.length}`);
 
   for (const message of messages) {
     if (message.key.fromMe) {
@@ -42,8 +42,8 @@ async function handleMessageUpsert({ messages, type, client, logger }: MessageUp
 
     const skipOldMsg = message.messageTimestamp && isMessageTooOld(message.messageTimestamp, HISTORY_MIN_DATE)
     const msgDate = message.messageTimestamp ? new Date(+message.messageTimestamp * 1000) : null;
-    // Verificar se a mensagem é muito antiga (filtro de histórico)
     const initBody = message.message?.conversation || message.message?.extendedTextMessage?.text || "unknown";
+    
     console.log(`Recebendo mensagem | De: ${message.key.remoteJid} | Data: ${msgDate?.toDateString()} | Tipo: ${type} | SkippOldMsg: ${skipOldMsg} | Conteúdo: ${initBody}`);
 
     if (skipOldMsg) {

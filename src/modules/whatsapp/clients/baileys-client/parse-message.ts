@@ -37,7 +37,7 @@ interface FileMessageContent extends MessageContent {
 }
 
 async function parseMessage({ message, instance, clientId, phone, logger, storage, sessionId }: ParseMessageParams): Promise<MessageDto> {
-  logger.log("Parsing message", message);
+  logger.log("Parsing message");
   const { isFile, contactName, quotedMessageId, ...content } = getMessageContent(message, logger);
 
   const isFromMe = message.key.fromMe;
@@ -87,7 +87,7 @@ async function parseMessage({ message, instance, clientId, phone, logger, storag
 }
 
 function getMessageContent(message: WAMessage, logger: ProcessingLogger): MessageContent | FileMessageContent {
-  logger.debug("Getting message content", message);
+  logger.debug("Getting message content");
   const timestamp = String(message.messageTimestamp).padEnd(13, "0")
   const sentAt = new Date(Number(timestamp));
   const messageBase: BaseMessageContent = {
@@ -359,7 +359,7 @@ function getMessageFrom(key: WAMessageKey) {
       groupId: key.remoteJid?.replace("@g.us", "") || "",
     };
   }
-  
+
   // Para LID, tentar usar jidAlt (número real)
   if (isLid) {
     const jidAlt = key.remoteJidAlt || "";
@@ -404,7 +404,7 @@ async function resolveMessageFrom(
   }
 
   const isLid = key.addressingMode === "lid" || key.remoteJid?.endsWith("@lid");
-  
+
   // Se não é LID ou já tem telefone, retorna
   if (!isLid || (result.phone && result.phone.length > 0)) {
     return result;
@@ -412,7 +412,7 @@ async function resolveMessageFrom(
 
   // É LID sem telefone - precisamos resolver
   const lidId = (result as any).lid || key.remoteJid?.split("@")[0] || "";
-  
+
   if (!lidId) {
     logger.log("LID message without LID identifier, cannot resolve phone");
     return result;
@@ -436,7 +436,7 @@ async function resolveMessageFrom(
 
   // 2. Não encontrou - retorna o LID como fallback e loga o aviso
   logger.log(`WARNING: Could not resolve LID ${lidId} to a phone number. remoteJidAlt was empty and no mapping found in database.`);
-  
+
   return {
     ...result,
     phone: result.phone || lidId,
@@ -458,24 +458,18 @@ async function processMediaFile(instance: string, message: WAMessage, content: F
 
   logger.debug("Media downloaded, uploading to storage", { bufferSize: mediaBuffer.length });
 
-  try {
-    const uploadedFile = await filesService.uploadFile({
-      buffer: mediaBuffer,
-      fileName: content.fileName,
-      mimeType: content.fileType,
-      dirType: FileDirType.PUBLIC,
-      instance,
-    });
 
-    logger.debug("Media uploaded", { fileId: uploadedFile.id });
+  const uploadedFile = await filesService.uploadFile({
+    buffer: mediaBuffer,
+    fileName: content.fileName,
+    mimeType: content.fileType,
+    dirType: FileDirType.PUBLIC,
+    instance,
+  });
 
-    return uploadedFile;
-  } catch (err) {
-    logger.debug("Error uploading media file", err);
-    throw new Error("Failed to upload media file");
-  }
+  logger.debug("Media uploaded", { fileId: uploadedFile.id });
 
-
+  return uploadedFile;
 }
 
 export default parseMessage;
