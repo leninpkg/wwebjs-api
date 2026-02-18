@@ -1,4 +1,4 @@
-import MessageDto from "../whatsapp/types";
+import InpulseMessage from "../whatsapp/inpulse-types";
 
 export interface QRReceivedEvent {
   type: "qr-received";
@@ -15,7 +15,7 @@ export interface AuthSuccessEvent {
 export interface MessageReceivedEvent {
   type: "message-received";
   clientId: number;
-  message: MessageDto;
+  message: InpulseMessage;
 }
 
 export interface MessageStatusReceivedEvent {

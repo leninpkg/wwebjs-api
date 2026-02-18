@@ -1,12 +1,12 @@
 import { jidNormalizedUser } from "baileys";
-import { EditMessageOptions } from "../../types";
+import { EditMessageRequest } from "../../inpulse-types";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
-import ProcessingLogger from "../../../../utils/processing-logger";
+import ProcessingLogger from "../../../../helpers/processing-logger";
 import parseMessage from "./parse-message";
 
 interface EditMessageContext {
   client: BaileysWhatsappClient;
-  options: EditMessageOptions;
+  options: EditMessageRequest;
   logger: ProcessingLogger;
 }
 

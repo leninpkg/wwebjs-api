@@ -1,8 +1,8 @@
-import { MessageStatus } from "../../types";
+import { InpulseMessageStatus } from "../../inpulse-types";
 
-const ACKS_DICT: Array<MessageStatus> = ["ERROR", "PENDING", "SENT", "RECEIVED", "READ", "READ"];
+const ACKS_DICT: Array<InpulseMessageStatus> = ["ERROR", "PENDING", "SENT", "RECEIVED", "READ", "READ"];
 
-function parseAck(ack: number): MessageStatus {
+function parseAck(ack: number): InpulseMessageStatus {
   return ACKS_DICT[ack] || "ERROR";
 }
 

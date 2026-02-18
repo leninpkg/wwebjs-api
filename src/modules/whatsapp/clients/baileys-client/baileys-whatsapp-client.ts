@@ -1,15 +1,15 @@
-import makeWASocket, { MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
+import { Logger } from "@in.pulse-crm/utils";
+import makeWASocket, { GroupMetadata, MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
 import Bottleneck from "bottleneck";
 import "dotenv/config";
-import ProcessingLogger from "../../../../utils/processing-logger";
+import ProcessingLogger from "../../../../helpers/processing-logger";
 import type DataClient from "../../../data/data-client";
 import WppEventEmitter from "../../../events/emitter/emitter";
-import type MessageDto from "../../types";
-import type { EditMessageOptions, FetchMessageHistoryOptions, FetchMessageHistoryResult, SendMessageOptions } from "../../types";
-import WhatsappClient from "../whatsapp-client";
+import type InpulseMessage from "../../inpulse-types";
+import type { EditMessageRequest, FetchMessageHistoryOptions, FetchMessageHistoryResult, SendMessageRequest } from "../../inpulse-types";
+import type WhatsappClient from "../whatsapp-client";
 import handleConnectionUpdate from "./handle-connection-update";
 import handleEditMessage from "./handle-edit-message";
-import handleFetchMessageHistory from "./handle-fetch-message-history";
 import handleHistorySet from "./handle-history-set";
 import handleMessageUpdate from "./handle-message-update";
 import handleMessageUpsert from "./handle-message-upsert";
@@ -34,7 +34,7 @@ class BaileysWhatsappClient implements WhatsappClient {
     // Limites configuráveis via variáveis de ambiente
     const messagesPerHour = parseInt(process.env["WA_MESSAGES_PER_HOUR"] || "300", 10);
     const minTimeBetweenMessages = parseInt(process.env["WA_MIN_TIME_BETWEEN_MESSAGES"] || "3000", 10);
-    
+
     this._messageQueue = new Bottleneck({
       reservoir: messagesPerHour, // Máximo de mensagens por hora (configurável)
       reservoirRefreshAmount: messagesPerHour,
@@ -72,6 +72,8 @@ class BaileysWhatsappClient implements WhatsappClient {
     this._sock.ev.on("messages.upsert", this.onMessagesUpsert.bind(this));
     this._sock.ev.on("messages.update", this.onMessagesUpdate.bind(this));
     this._sock.ev.on("messaging-history.set", this.onHistorySet.bind(this));
+    this._sock.ev.on("groups.update", this.onGroupsUpdate.bind(this));
+    this._sock.ev.on("groups.upsert", this.onGroupsUpsert.bind(this));
   }
 
   private getLogger(processName: string, processId: string, input: unknown, debug: boolean = false): ProcessingLogger {
@@ -118,6 +120,15 @@ class BaileysWhatsappClient implements WhatsappClient {
     }
   }
 
+  private async onGroupsUpdate(data: Partial<GroupMetadata>[]) {
+    Logger.debug(`[${this.sessionId}] Groups Update event received: ${data.length} groups updated`, data);
+  }
+
+  private async onGroupsUpsert(data: GroupMetadata[]) {
+    Logger.debug(`[${this.sessionId}] Groups Upsert event received: ${data.length} groups upserted`, data);
+  }
+
+
   public isValidWhatsapp(phone: string): Promise<boolean> {
     const processId = `validate-whatsapp-${Date.now()}`;
     const logger = this.getLogger("Validate WhatsApp", processId, { phone });
@@ -126,10 +137,10 @@ class BaileysWhatsappClient implements WhatsappClient {
     throw new Error("Method not implemented.");
   }
 
-  public async sendMessage(props: SendMessageOptions, isGroup: boolean = false): Promise<MessageDto> {
+  public async sendMessage(props: SendMessageRequest, isGroup: boolean = false): Promise<InpulseMessage> {
     const processId = `send-message-${Date.now()}`;
     const logger = this.getLogger("Send Message", processId, { props, isGroup });
-    
+
     // Enfileirar mensagem para evitar rate limiting
     return this._messageQueue.schedule(async () => {
       try {
@@ -142,22 +153,11 @@ class BaileysWhatsappClient implements WhatsappClient {
     });
   }
 
-  public async editMessage(props: EditMessageOptions): Promise<MessageDto> {
+  public async editMessage(props: EditMessageRequest): Promise<InpulseMessage> {
     const processId = `edit-message-${Date.now()}`;
     const logger = this.getLogger("Edit Message", processId, { props });
     try {
       return await handleEditMessage({ client: this, options: props, logger });
-    } catch (error) {
-      logger.failed(error);
-      throw error;
-    }
-  }
-
-  public async fetchMessageHistory(options: FetchMessageHistoryOptions): Promise<FetchMessageHistoryResult> {
-    const processId = `fetch-history-${Date.now()}`;
-    const logger = this.getLogger("Fetch Message History", processId, { options });
-    try {
-      return await handleFetchMessageHistory({ client: this, options, logger });
     } catch (error) {
       logger.failed(error);
       throw error;
@@ -188,6 +188,34 @@ class BaileysWhatsappClient implements WhatsappClient {
       logger.failed(`Failed to get avatar URL: ${error}`);
       return null;
     }
+  }
+
+  public async getGroups(): Promise<Array<{ id: string; name: string }>> {
+    const processId = `get-groups-${Date.now()}`;
+    const logger = this.getLogger("Get Groups", processId, {});
+
+    try {
+      logger.log("Fetching all WhatsApp groups");
+
+      // Fetch all groups the user is participating in
+      const groups = await this._sock.groupFetchAllParticipating();
+
+      // Transform to the desired format
+      const groupList = Object.values(groups).map(group => ({
+        id: group.id,
+        name: group.subject
+      }));
+
+      logger.success(`Retrieved ${groupList.length} groups`);
+      return groupList;
+    } catch (error) {
+      logger.failed(`Failed to get groups: ${error}`);
+      throw error;
+    }
+  }
+
+  public async fetchMessageHistory(_options: FetchMessageHistoryOptions): Promise<FetchMessageHistoryResult> {
+    throw new Error("Method not implemented.");
   }
 
   get phone(): string {

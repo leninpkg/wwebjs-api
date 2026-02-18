@@ -1,6 +1,6 @@
 import { ConnectionState, DisconnectReason } from "baileys";
-import ProcessingLogger from "../../../../utils/processing-logger";
-import { sleep } from "../../../../utils/humanize.utils";
+import ProcessingLogger from "../../../../helpers/processing-logger";
+import { sleep } from "../../../../helpers/humanize.utils";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import makeNewSocket from "./make-new-socket";
 

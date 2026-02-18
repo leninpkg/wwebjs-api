@@ -1,8 +1,8 @@
 import { FileDirType } from "@in.pulse-crm/sdk";
-import { downloadMediaMessage, WAMessage, WAMessageKey } from "baileys";
-import ProcessingLogger from "../../../../utils/processing-logger";
+import { downloadMediaMessage, proto, WAMessage, WAMessageKey } from "baileys";
+import ProcessingLogger from "../../../../helpers/processing-logger";
 import filesService from "../../../files/files.service";
-import MessageDto from "../../types";
+import InpulseMessage from "../../inpulse-types";
 
 type MessageType = "chat" | "image" | "video" | "audio" | "document" | "sticker" | "contact" | "location" | "call" | "unsupported";
 
@@ -33,20 +33,19 @@ interface FileMessageContent extends MessageContent {
   isFile: true;
 }
 
-async function parseMessage({ message, instance, clientId, phone, logger }: ParseMessageParams): Promise<MessageDto> {
+async function parseMessage({ message, instance, clientId, phone, logger }: ParseMessageParams): Promise<InpulseMessage> {
   logger.log("Parsing message", message);
   const { isFile, contactName, quotedMessageId, ...content } = getMessageContent(message, logger);
+  logger.log("Extracted message content", content);
 
   const isFromMe = message.key.fromMe;
-
-  logger.log("Verifying message sender info");
   const from = getMessageFrom(message.key);
   logger.log("Message sender phone", from);
-  logger.log("Verifying if message is forwarded");
+
   const isForwarded = getIsForwarded(message);
   logger.log("Is message forwarded", isForwarded);
 
-  const parsedMessage: MessageDto = {
+  const parsedMessage: InpulseMessage = {
     instance,
     clientId,
     wwebjsIdStanza: message.key.id || null,
@@ -71,8 +70,11 @@ async function parseMessage({ message, instance, clientId, phone, logger }: Pars
   return parsedMessage;
 }
 
-function getMessageContent(message: WAMessage, logger: ProcessingLogger): MessageContent | FileMessageContent {
+
+function getMessageContent(message: WAMessage, logger: ProcessingLogger, raw?: proto.IMessage): MessageContent | FileMessageContent {
   logger.debug("Getting message content", message);
+
+  raw?.messageContextInfo?.deviceListMetadata?.senderTimestamp
   const timestamp = String(message.messageTimestamp).padEnd(13, "0")
   const sentAt = new Date(Number(timestamp));
   const messageBase: BaseMessageContent = {
@@ -385,8 +387,6 @@ async function processMediaFile(instance: string, message: WAMessage, content: F
     logger.debug("Error uploading media file", err);
     throw new Error("Failed to upload media file");
   }
-
-
 }
 
 export default parseMessage;

@@ -1,6 +1,6 @@
 import { MessageUpsertType, WAMessage } from "baileys";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
-import ProcessingLogger from "../../../../utils/processing-logger";
+import ProcessingLogger from "../../../../helpers/processing-logger";
 import parseMessage from "./parse-message";
 import "dotenv/config";
 

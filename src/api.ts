@@ -1,6 +1,6 @@
 import express, { Request, Response, Router, NextFunction } from "express";
 import WhatsappClient from "./modules/whatsapp/clients/whatsapp-client";
-import type { FetchMessageHistoryOptions } from "./modules/whatsapp/types";
+import type { FetchMessageHistoryOptions } from "./modules/whatsapp/inpulse-types";
 import { Logger } from "@in.pulse-crm/utils";
 
 class ExpressApi {
@@ -17,6 +17,7 @@ class ExpressApi {
     this.router.post("/send-message", this.sendMessage.bind(this));
     this.router.post("/edit-message", this.editMessage.bind(this));
     this.router.post("/fetch-message-history", this.fetchMessageHistory.bind(this));
+    this.router.get("/groups", this.getGroups.bind(this));
 
     this.app.use(express.json());
     this.app.use("/api", this.router);
@@ -97,6 +98,21 @@ class ExpressApi {
     } catch (error) {
       console.error("[API] Error fetching message history:", error);
       console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
+      res.status(500).json({
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+        details: error instanceof Error ? error.stack : undefined
+      });
+    }
+  }
+
+  private async getGroups(_req: Request, res: Response): Promise<void> {
+    try {
+      Logger.debug("[API] Fetching WhatsApp groups");
+      const groups = await this.client.getGroups();
+      res.status(200).json({ groups });
+    } catch (error) {
+      console.error("[API] Error fetching groups:", error);
       res.status(500).json({
         error: "Internal server error",
         message: error instanceof Error ? error.message : String(error),

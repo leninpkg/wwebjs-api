@@ -30,41 +30,56 @@ model BaileysAuth {
   @@map("baileys_auth")
 }
 
-model Message {
+model RawGroupMetadata {
+  id        String @id
+  remoteJid String @map("remote_jid")
+
+  instance  String
+  sessionId String   @map("session_id")
+  metadata  Json     @map("metadata")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("group_metadata")
+}
+
+model RawMessage {
   id          String   @id
-  instance    String
   sessionId   String   @map("session_id")
+  remoteJid   String   @map("remote_jid")
+  instance    String
+  timestamp   String   @db.VarChar(20)
+  keyData     Json     @map("key_data")
   messageData Json     @map("message_data")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  messageReactions  MessageReaction[]
-  parsedMessage     ParsedMessage?
+  parsedMessage     InpulseMessage?
   messageSyncStatus MessageProcessingStatus?
 
-  @@map("messages")
+  @@map("raw_messages")
 }
 
-model ParsedMessage {
-  messageId   String              @map("message_id")
-  sessionId   String              @map("session_id")
-  instance    String              @map("instance")
+model InpulseMessage {
+  messageId   String               @map("message_id")
+  sessionId   String               @map("session_id")
+  instance    String               @map("instance")
   from        String
   to          String
-  type        ParsedMessageType
-  quotedId    String?             @map("quoted_id")
-  body        String?             @db.Text
-  timestamp   String              @db.VarChar(20)
-  sentAt      DateTime            @map("sent_at")
-  status      ParsedMessageStatus
-  fileId      String?             @map("file_id")
-  fileName    String?             @map("file_name") @db.Text
-  fileType    String?             @map("file_type")
-  fileSize    Int?                @map("file_size")
-  isForwarded Boolean             @map("is_forwarded")
-  isEdited    Boolean             @map("is_edited")
+  type        InpulseMessageType
+  quotedId    String?              @map("quoted_id")
+  body        String?              @db.Text
+  timestamp   String               @db.VarChar(20)
+  sentAt      DateTime             @map("sent_at")
+  status      InpulseMessageStatus
+  fileId      String?              @map("file_id")
+  fileName    String?              @map("file_name") @db.Text
+  fileType    String?              @map("file_type")
+  fileSize    Int?                 @map("file_size")
+  isForwarded Boolean              @map("is_forwarded")
+  isEdited    Boolean              @map("is_edited")
 
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([messageId], name: "uq_parsed_messages_message_id")
   @@index([sessionId], name: "idx_parsed_messages_session_id")
@@ -80,26 +95,13 @@ model MessageProcessingStatus {
   isSaved   Boolean @map("is_saved")
   isUpdated Boolean @map("is_updated")
 
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([messageId], name: "uq_message_processing_status_message_id")
   @@map("message_processing_status")
 }
 
-model MessageReaction {
-  id        String   @id
-  messageId String   @map("message_id")
-  reaction  String
-  reactedBy String   @map("reacted_by")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-
-  @@index([messageId], name: "idx_message_reactions_message_id")
-  @@map("message_reactions")
-}
-
-enum ParsedMessageStatus {
+enum InpulseMessageStatus {
   PENDING
   SENT
   RECEIVED
@@ -109,7 +111,7 @@ enum ParsedMessageStatus {
   REVOKED
 }
 
-enum ParsedMessageType {
+enum InpulseMessageType {
   text
   ptt
   image

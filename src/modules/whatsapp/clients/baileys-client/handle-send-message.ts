@@ -1,16 +1,16 @@
 import { Logger } from "@in.pulse-crm/utils";
 import { AnyMediaMessageContent, AnyRegularMessageContent, jidNormalizedUser } from "baileys";
-import { phoneToAltBr } from "../../../../utils/phone.utils";
-import ProcessingLogger from "../../../../utils/processing-logger";
-import { calculateTypingDuration, sleep } from "../../../../utils/humanize.utils";
-import { SendFileOptions, SendMessageOptions } from "../../types";
+import { phoneToAltBr } from "../../../../helpers/phone.utils";
+import ProcessingLogger from "../../../../helpers/processing-logger";
+import { calculateTypingDuration, sleep } from "../../../../helpers/humanize.utils";
+import { SendFileMessageRequest, SendMessageRequest } from "../../inpulse-types";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import parseMessage from "./parse-message";
 import filesService from "../../../files/files.service";
 
 interface SendMessageContext {
   client: BaileysWhatsappClient;
-  options: SendMessageOptions;
+  options: SendMessageRequest;
   isGroup: boolean;
   logger: ProcessingLogger;
 }
@@ -118,14 +118,14 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
   }
 }
 
-async function getMessageOptions(options: SendMessageOptions, logger: ProcessingLogger): Promise<AnyRegularMessageContent> {
+async function getMessageOptions(options: SendMessageRequest, logger: ProcessingLogger): Promise<AnyRegularMessageContent> {
   logger.debug(`Preparando opções de mensagem`);
   const isFileMessage = "fileUrl" in options;
   logger.debug(`Tipo de mensagem: ${isFileMessage ? "arquivo" : "texto"}`);
 
   if (isFileMessage) {
     logger.debug(`Processando mensagem de arquivo`);
-    return await getFileMessageOptions(options as SendFileOptions, logger);
+    return await getFileMessageOptions(options as SendFileMessageRequest, logger);
   }
   if (!options.text) {
     throw new Error("Text message must have 'text' property");
@@ -136,7 +136,7 @@ async function getMessageOptions(options: SendMessageOptions, logger: Processing
   };
 }
 
-async function getFileMessageOptions(options: SendFileOptions, logger: ProcessingLogger): Promise<AnyMediaMessageContent> {
+async function getFileMessageOptions(options: SendFileMessageRequest, logger: ProcessingLogger): Promise<AnyMediaMessageContent> {
   // Extrair informações do arquivo
   const fileName = options.fileName || options.file?.name || "file";
 

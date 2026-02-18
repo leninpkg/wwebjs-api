@@ -1,4 +1,4 @@
-import { proto } from "baileys";
+import { BaileysEventMap, proto } from "baileys";
 
 export type ProcessingStatus = "processing" | "success" | "failed";
 
@@ -39,3 +39,8 @@ export interface Message {
 export type FullRawMessageJson = MessageJson;
 /** @deprecated Use FullMessage instead */
 export type FullRawMessage = Message;
+
+
+export type MessageUpsertEvent = BaileysEventMap["messages.upsert"];
+export type MessageUpdateEvent = BaileysEventMap["messages.update"];
+export type MessageDeleteEvent = BaileysEventMap["messages.delete"];
