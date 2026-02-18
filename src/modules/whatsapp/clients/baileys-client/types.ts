@@ -34,6 +34,15 @@ export interface Message {
   updated_at: Date;
 }
 
+export interface MessageFile {
+  messageId: string;
+  inpulseId: number | null;
+  fileName: string;
+  fileType: string;
+  fileSize: number | null;
+  filePath: string;
+}
+
 // Backwards compatibility aliases
 /** @deprecated Use FullMessageJson instead */
 export type FullRawMessageJson = MessageJson;

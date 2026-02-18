@@ -1,4 +1,4 @@
-import { isJidGroup, proto, WAMessage, WAMessageKey } from "baileys";
+import { BufferJSON, isJidGroup, proto, WAMessage, WAMessageKey } from "baileys";
 import onlyDigits from "../../../../../helpers/only-digits";
 import InpulseMessage, { InpulseMessageStatus } from "../../../inpulse-types";
 import { RawMessage } from "../../../types";
@@ -6,6 +6,7 @@ import { extractMessageData, FileMessageContent } from "../helpers/extract-messa
 import { extractPhoneFromKey } from "../helpers/extract-phone-from-key";
 import saveMessageMedia from "../helpers/save-message-media";
 import BaileysStore from "../store/baileys-store";
+import { extractLidFromKey } from "../helpers/extract-lid-from-key";
 
 type BaileysMessage = WAMessage | {
   key: proto.IMessageKey;
@@ -37,23 +38,30 @@ class BaileysMessageAdapter {
       remoteJid: this.getChatId(),
       timestamp: String(this._message.messageTimestamp),
       keyData: this._message.key,
-      messageData: this._message.message || {},
+      messageData: JSON.parse(JSON.stringify(this._message.message, BufferJSON.replacer)) || {},
     }
   }
 
   public async toInpulseMessage(): Promise<InpulseMessage> {
     const remotePhone = await this.getRemotePhone();
+    const remoteLid = await this.getRemoteLid();
     const fromMe = remotePhone === this._phone;
     const chatId = this.getChatId();
     const { isFile, ...content } = extractMessageData(this._message.message!);
     const sentAt = this.getMessageDate();
 
+    if (!remotePhone && !remoteLid) {
+      throw new Error("Could not extract remote phone or lid from message");
+    }
+
+    const remote = remoteLid || remotePhone!;
+
     const message: InpulseMessage = {
       instance: this._instance,
       clientId: this._clientId,
       wwebjsIdStanza: this.getMessageId(),
-      from: fromMe ? this._phone : remotePhone,
-      to: fromMe ? remotePhone : this._phone,
+      from: fromMe ? `me:${this._phone}` : remote,
+      to: fromMe ? remote : `me:${this._phone}`,
       isForwarded: this.getIsForwarded(this._message.message || {}),
       isGroup: isJidGroup(chatId) || false,
       groupId: chatId.replace("@g.us", "") || null,
@@ -92,7 +100,7 @@ class BaileysMessageAdapter {
     throw new Error("Message does not have an id");
   }
 
-  private async getRemotePhone(): Promise<string> {
+  private async getRemotePhone(): Promise<string | null> {
     // Try to get the phone number from the message key
     const phoneFromKey = extractPhoneFromKey(this._message.key);
     if (phoneFromKey) {
@@ -100,11 +108,19 @@ class BaileysMessageAdapter {
     }
     // If that fails, try to get it from the store
     const contact = await this._store.getContactByKey(this._message.key);
-    if (contact?.phoneNumber) {
-      return onlyDigits(contact.phoneNumber);
+    if (contact?.phone) {
+      return onlyDigits(contact.phone);
     }
-    // If that also fails, throw an error
-    throw new Error("Could not determine the phone number from the message key or store");
+    return null;
+  }
+
+  private async getRemoteLid(): Promise<string | null> {
+    const lidFromKey = extractLidFromKey(this._message.key);
+    if (lidFromKey) {
+      return lidFromKey;
+    }
+    const contact = await this._store.getContactByKey(this._message.key);
+    return contact?.id || null;
   }
 
   private getIsForwarded(message: proto.IMessage): boolean {
@@ -134,7 +150,7 @@ class BaileysMessageAdapter {
     const contact = await this._store.getContactByKey(key);
 
     if (contact?.name || contact?.verifiedName) {
-      return contact.name || contact.verifiedName || null;
+      return contact.name || contact.verifiedName!;
     }
     if ("verifiedBizName" in this._message && this._message.verifiedBizName) {
       return this._message.verifiedBizName;

@@ -1,226 +1,126 @@
-import { Logger } from "@in.pulse-crm/utils";
-import makeWASocket, { GroupMetadata, MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
-import Bottleneck from "bottleneck";
+import makeWASocket from "baileys";
 import "dotenv/config";
-import ProcessingLogger from "../../../../helpers/processing-logger";
-import type DataClient from "../../../data/data-client";
 import WppEventEmitter from "../../../events/emitter/emitter";
 import type InpulseMessage from "../../inpulse-types";
-import type { EditMessageRequest, FetchMessageHistoryOptions, FetchMessageHistoryResult, SendMessageRequest } from "../../inpulse-types";
+import type { EditMessageRequest, SendMessageRequest } from "../../inpulse-types";
 import type WhatsappClient from "../whatsapp-client";
-import handleConnectionUpdate from "./handle-connection-update";
-import handleEditMessage from "./handle-edit-message";
-import handleHistorySet from "./handle-history-set";
-import handleMessageUpdate from "./handle-message-update";
-import handleMessageUpsert from "./handle-message-upsert";
-import handleSendMessage from "./handle-send-message";
 import makeNewSocket from "./make-new-socket";
+import BaileysStore from "./store/baileys-store";
+import { ILogger } from "baileys/lib/Utils/logger";
+import handleConnectionUpdate from "./handle-connection-update";
+import BaileysAuth from "./auth/baileys-auth";
 
+interface BuildBaileysWhatsappClientParams {
+  sessionId: string;
+  clientId: number;
+  instance: string;
+  eventEmitter: WppEventEmitter;
+  store: BaileysStore;
+  auth: BaileysAuth;
+  logger: ILogger;
+}
+interface BaileysWhatsappClientParams {
+  sessionId: string;
+  clientId: number;
+  instance: string;
+  _sock: ReturnType<typeof makeWASocket>;
+  _ev: WppEventEmitter;
+  _logger: ILogger;
+  _store: BaileysStore;
+  _auth: BaileysAuth;
+}
 class BaileysWhatsappClient implements WhatsappClient {
-  public _phone: string = "";
-  private _messageQueue: Bottleneck;
-  public _reconnectAttempts: number = 0;
-  public _lastReconnectTime: number = 0;
 
-  constructor(
-    public sessionId: string,
-    public clientId: number,
-    public instance: string,
-    public _storage: DataClient,
-    public _sock: ReturnType<typeof makeWASocket>,
-    public _ev: WppEventEmitter,
-  ) {
-    // Configurar limitador de taxa para prevenir bloqueios do WhatsApp
-    // Limites configuráveis via variáveis de ambiente
-    const messagesPerHour = parseInt(process.env["WA_MESSAGES_PER_HOUR"] || "300", 10);
-    const minTimeBetweenMessages = parseInt(process.env["WA_MIN_TIME_BETWEEN_MESSAGES"] || "3000", 10);
+  readonly instance: string;
+  readonly clientId: number;
+  readonly sessionId: string;
+  _sock: ReturnType<typeof makeWASocket>;
+  _logger: ILogger;
+  _store: BaileysStore;
+  _auth: BaileysAuth;
+  _ev: WppEventEmitter;
+  phone: string = "";
+  reconnectAttempts: number = 0;
+  lastReconnectTime: number = 0;
 
-    this._messageQueue = new Bottleneck({
-      reservoir: messagesPerHour, // Máximo de mensagens por hora (configurável)
-      reservoirRefreshAmount: messagesPerHour,
-      reservoirRefreshInterval: 60 * 60 * 1000, // 1 hora em ms
-      maxConcurrent: 1, // Processar uma mensagem por vez
-      minTime: minTimeBetweenMessages, // Mínimo de tempo entre mensagens (configurável)
+
+  constructor(props: BaileysWhatsappClientParams) {
+    this.clientId = props.clientId;
+    this.instance = props.instance;
+    this.sessionId = props.sessionId;
+    this._auth = props._auth;
+    this._logger = props._logger;
+    this._store = props._store;
+    this._sock = props._sock;
+    this._ev = props._ev;
+
+    this._logger.info(`BaileysWhatsappClient initialized with sessionId: ${props.sessionId}, clientId: ${props.clientId}, instance: ${props.instance}`);
+
+    new Promise(async (res) => {
+      this._logger.debug(await this._store.getChats(), `Store loaded chats`);
+      this._logger.debug(await this._store.getGroups(), `Store loaded groups`);
+      this._logger.debug(await this._store.getContacts(), `Store loaded contacts`);
+      this._logger.debug(await this._store.getMessages(), `Store loaded messages`);
+
+      res(true);
     });
 
-    // Log de eventos da fila para monitoramento
-    this._messageQueue.on("failed", (error) => {
-      console.error(`[Queue ${this.sessionId}] Job failed:`, error);
-    });
-
-    this._messageQueue.on("depleted", () => {
-      console.log(`[Queue ${this.sessionId}] Reservoir depleted, waiting for refresh...`);
-    });
-  }
-
-  public static async build(
-    sessionId: string,
-    clientId: number,
-    instance: string,
-    storage: DataClient,
-    eventEmitter: WppEventEmitter,
-  ): Promise<BaileysWhatsappClient> {
-    const socket = await makeNewSocket(sessionId, storage);
-    const client = new BaileysWhatsappClient(sessionId, clientId, instance, storage, socket, eventEmitter);
-    client.bindEvents();
-    return client;
+    this.bindEvents();
   }
 
   public bindEvents() {
-    this._sock.ev.on("connection.update", this.onConnectionUpdate.bind(this));
-    this._sock.ev.on("creds.update", this._storage.saveAuthState.bind(this._storage, this.sessionId));
-    this._sock.ev.on("messages.upsert", this.onMessagesUpsert.bind(this));
-    this._sock.ev.on("messages.update", this.onMessagesUpdate.bind(this));
-    this._sock.ev.on("messaging-history.set", this.onHistorySet.bind(this));
-    this._sock.ev.on("groups.update", this.onGroupsUpdate.bind(this));
-    this._sock.ev.on("groups.upsert", this.onGroupsUpsert.bind(this));
+    this._sock.ev.on("connection.update", (update) => handleConnectionUpdate(update, this));
   }
 
-  private getLogger(processName: string, processId: string, input: unknown, debug: boolean = false): ProcessingLogger {
-    return new ProcessingLogger(this._storage, this.instance, processName, processId, input, debug);
+  public static async build(props: BuildBaileysWhatsappClientParams): Promise<BaileysWhatsappClient> {
+    const socket = await makeNewSocket({
+      auth: props.auth,
+      store: props.store,
+      logger: props.logger
+    });
+
+    const client = new BaileysWhatsappClient({
+      _sock: socket,
+      sessionId: props.sessionId,
+      clientId: props.clientId,
+      instance: props.instance,
+      _ev: props.eventEmitter,
+      _logger: props.logger,
+      _store: props.store,
+      _auth: props.auth
+    });
+
+    return client;
   }
 
-  private async onConnectionUpdate(update: Partial<ConnectionState>) {
-    const processId = `conn-update-${Date.now()}`;
-    const logger = this.getLogger("Connection Update", processId, update);
-    try {
-      await handleConnectionUpdate({ update, client: this, logger });
-    } catch (error) {
-      logger.failed(error);
-    }
-  }
-
-  private async onMessagesUpsert({ messages, type }: { messages: WAMessage[]; type: MessageUpsertType }) {
-    const processId = `messages-upsert-${Date.now()}`;
-    const logger = this.getLogger("Messages Upsert", processId, { type, messageCount: messages.length });
-    try {
-      await handleMessageUpsert({ messages, type, client: this, logger });
-    } catch (error) {
-      logger.failed(error);
-    }
-  }
-
-  private async onMessagesUpdate(updates: WAMessageUpdate[]) {
-    const processId = `messages-update-${Date.now()}`;
-    const logger = this.getLogger("Messages Update", processId, { updateCount: updates.length });
-    try {
-      await handleMessageUpdate({ updates, client: this, logger });
-    } catch (error) {
-      logger.failed(error);
-    }
-  }
-
-  private async onHistorySet({ messages, isLatest }: { messages: WAMessage[]; isLatest?: boolean }) {
-    const processId = `history-set-${Date.now()}`;
-    const logger = this.getLogger("History Set", processId, { messageCount: messages.length, isLatest }, true);
-    try {
-      await handleHistorySet({ client: this, messages, isLatest: !!isLatest, logger });
-    } catch (error) {
-      logger.failed(error);
-    }
-  }
-
-  private async onGroupsUpdate(data: Partial<GroupMetadata>[]) {
-    Logger.debug(`[${this.sessionId}] Groups Update event received: ${data.length} groups updated`, data);
-  }
-
-  private async onGroupsUpsert(data: GroupMetadata[]) {
-    Logger.debug(`[${this.sessionId}] Groups Upsert event received: ${data.length} groups upserted`, data);
-  }
-
-
-  public isValidWhatsapp(phone: string): Promise<boolean> {
-    const processId = `validate-whatsapp-${Date.now()}`;
-    const logger = this.getLogger("Validate WhatsApp", processId, { phone });
-
-    logger.log(`Checking if phone number is valid WhatsApp: ${phone}`);
+  public isValidWhatsapp(_phone: string): Promise<boolean> {
     throw new Error("Method not implemented.");
   }
 
-  public async sendMessage(props: SendMessageRequest, isGroup: boolean = false): Promise<InpulseMessage> {
-    const processId = `send-message-${Date.now()}`;
-    const logger = this.getLogger("Send Message", processId, { props, isGroup });
-
-    // Enfileirar mensagem para evitar rate limiting
-    return this._messageQueue.schedule(async () => {
-      try {
-        logger.log("Mensagem saindo da fila para processamento");
-        return await handleSendMessage({ client: this, options: props, isGroup, logger });
-      } catch (error) {
-        logger.failed(error);
-        throw error;
-      }
-    });
+  public async sendMessage(_props: SendMessageRequest, _isGroup: boolean = false): Promise<InpulseMessage> {
+    throw new Error("Method not implemented.");
   }
 
-  public async editMessage(props: EditMessageRequest): Promise<InpulseMessage> {
-    const processId = `edit-message-${Date.now()}`;
-    const logger = this.getLogger("Edit Message", processId, { props });
-    try {
-      return await handleEditMessage({ client: this, options: props, logger });
-    } catch (error) {
-      logger.failed(error);
-      throw error;
-    }
+  public async editMessage(_props: EditMessageRequest): Promise<InpulseMessage> {
+    throw new Error("Method not implemented.");
   }
 
-  public async getAvatarUrl(phone: string): Promise<string | null> {
-    const processId = `get-avatar-${Date.now()}`;
-    const logger = this.getLogger("Get Avatar URL", processId, { phone });
-
-    try {
-      logger.log(`Getting avatar URL for phone number: ${phone}`);
-
-      // Normalize phone to JID format
-      const cleanPhone = phone.replace("@s.whatsapp.net", "").trim();
-      if (!cleanPhone || !/^\d+$/.test(cleanPhone)) {
-        throw new Error(`Invalid phone number format: ${phone}`);
-      }
-
-      const jid = `${cleanPhone}@s.whatsapp.net`;
-
-      // Get avatar URL from socket
-      const avatarUrl = await this._sock.profilePictureUrl(jid, "image");
-
-      logger.success(`Avatar URL retrieved: ${avatarUrl}`);
-      return avatarUrl || null;
-    } catch (error) {
-      logger.failed(`Failed to get avatar URL: ${error}`);
-      return null;
-    }
+  public async getAvatarUrl(_phone: string): Promise<string | null> {
+    throw new Error("Method not implemented.");
   }
 
   public async getGroups(): Promise<Array<{ id: string; name: string }>> {
-    const processId = `get-groups-${Date.now()}`;
-    const logger = this.getLogger("Get Groups", processId, {});
-
-    try {
-      logger.log("Fetching all WhatsApp groups");
-
-      // Fetch all groups the user is participating in
-      const groups = await this._sock.groupFetchAllParticipating();
-
-      // Transform to the desired format
-      const groupList = Object.values(groups).map(group => ({
-        id: group.id,
-        name: group.subject
-      }));
-
-      logger.success(`Retrieved ${groupList.length} groups`);
-      return groupList;
-    } catch (error) {
-      logger.failed(`Failed to get groups: ${error}`);
-      throw error;
-    }
-  }
-
-  public async fetchMessageHistory(_options: FetchMessageHistoryOptions): Promise<FetchMessageHistoryResult> {
     throw new Error("Method not implemented.");
   }
 
-  get phone(): string {
-    return this._phone;
+  public resetConnAttempts() {
+    this.reconnectAttempts = 0;
+    this.lastReconnectTime = 0;
+    this._logger.info("Reconnection attempts reset");
   }
+
+
+
 }
 
 export default BaileysWhatsappClient;

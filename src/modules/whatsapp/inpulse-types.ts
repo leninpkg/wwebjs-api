@@ -1,6 +1,7 @@
 import { type File } from "@in.pulse-crm/sdk";
 
 export type InpulseMessageStatus = "PENDING" | "SENT" | "RECEIVED" | "READ" | "DOWNLOADED" | "ERROR" | "REVOKED";
+
 export default interface InpulseMessage {
   instance: string;
   from: string;

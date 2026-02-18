@@ -1,4 +1,4 @@
-import { proto } from "baileys";
+import { Contact, GroupMetadata, proto } from "baileys";
 
 export interface RawMessage {
   id: string;
@@ -12,7 +12,7 @@ export interface RawMessage {
   updatedAt?: Date | null;
 }
 
-export interface RawGroupMetadata<GroupMetadata> {
+export interface RawGroupMetadata {
   id: string;
   instance: string;
   sessionId: string;
@@ -20,4 +20,15 @@ export interface RawGroupMetadata<GroupMetadata> {
   groupMetadata: GroupMetadata;
   createdAt?: Date;
   updatedAt?: Date | null;
+}
+
+export interface RawContact {
+  id: string;
+  instance: string;
+  sessionId: string;
+  phone: string | null;
+  name: string | null;
+  verifiedName: string | null;
+  avatarUrl: string | null;
+  rawData: Contact;
 }

@@ -20,7 +20,7 @@ model Session {
 model BaileysAuth {
   sessionId String   @map("session_id")
   key       String   @map("key") @db.VarChar(255)
-  value     String   @map("value")
+  value     Json     @map("value")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -40,6 +40,9 @@ model RawGroupMetadata {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@index([remoteJid], name: "idx_group_metadata_remote_jid")
+  @@index([sessionId], name: "idx_group_metadata_session_id")
+  @@index([instance], name: "idx_group_metadata_instance")
   @@map("group_metadata")
 }
 
@@ -56,8 +59,41 @@ model RawMessage {
 
   parsedMessage     InpulseMessage?
   messageSyncStatus MessageProcessingStatus?
+  file              RawMessageFile?
 
   @@map("raw_messages")
+}
+
+model RawMessageFile {
+  id        String   @id
+  messageId String   @unique @map("message_id")
+  inpulseId Int?     @unique @map("inpulse_id")
+  fileName  String   @map("file_name") @db.Text
+  fileType  String   @map("file_type")
+  fileSize  Int?     @map("file_size")
+  filePath  String   @map("file_path") @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("raw_message_files")
+}
+
+model RawContact {
+  id           String   @id
+  sessionId    String   @map("session_id")
+  instance     String
+  phoneNumber  String   @map("phone_number") @db.VarChar(50)
+  name         String?  @db.VarChar(255)
+  notify       String?  @db.VarChar(255)
+  verifiedName String?  @db.VarChar(255)
+  imgUrl       String?  @map("img_url") @db.Text
+  status       String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("raw_contacts")
 }
 
 model InpulseMessage {
@@ -99,6 +135,30 @@ model MessageProcessingStatus {
 
   @@unique([messageId], name: "uq_message_processing_status_message_id")
   @@map("message_processing_status")
+}
+
+model Log {
+  id        String   @id @default(uuid())
+  level     LogLevel
+  message   String   @db.Text
+  metadata  Json?
+  sessionId String?  @map("session_id")
+  instance  String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([level], name: "idx_logs_level")
+  @@index([sessionId], name: "idx_logs_session_id")
+  @@index([createdAt], name: "idx_logs_created_at")
+  @@map("logs")
+}
+
+enum LogLevel {
+  trace
+  debug
+  info
+  warn
+  error
+  fatal
 }
 
 enum InpulseMessageStatus {

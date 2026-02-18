@@ -1,14 +1,10 @@
+import { Boom } from '@hapi/boom';
 import { ConnectionState, DisconnectReason } from "baileys";
-import ProcessingLogger from "../../../../helpers/processing-logger";
 import { sleep } from "../../../../helpers/humanize.utils";
-import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import makeNewSocket from "./make-new-socket";
+import BaileysWhatsappClient from './baileys-whatsapp-client';
 
-interface ConnectionUpdateContext {
-  update: Partial<ConnectionState>;
-  client: BaileysWhatsappClient;
-  logger: ProcessingLogger;
-}
+
 
 /**
  * Calcula o delay de reconexão usando backoff exponencial
@@ -28,8 +24,8 @@ function shouldResetAttempts(lastReconnectTime: number): boolean {
   return Date.now() - lastReconnectTime > fiveMinutes;
 }
 
-async function handleConnectionUpdate({ update, client, logger }: ConnectionUpdateContext) {
-  logger.log("Connection update received", update);
+async function handleConnectionUpdate(update: Partial<ConnectionState>, client: BaileysWhatsappClient) {
+  client._logger.debug(update, "(handleConnectionUpdate) Connection update received");
 
   if (update.qr) {
     client._ev.emit({
@@ -38,65 +34,58 @@ async function handleConnectionUpdate({ update, client, logger }: ConnectionUpda
       qr: update.qr,
     });
 
-    logger.log("QR code generated for connection");
+    client._logger.info("(handleConnectionUpdate) QR code generated for connection");
   }
 
   if (update.connection === "open") {
-    logger.log("Connection opened successfully");
+    const phone = client._sock.user?.id || "unknown";
 
-    // Resetar contador de reconexão em caso de sucesso
-    client._reconnectAttempts = 0;
-    client._lastReconnectTime = 0;
-    logger.log("Contador de reconexão resetado após conexão bem-sucedida");
-
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    const sevenDaysAgo = new Date(Date.now() - sevenDays);
-    client._sock.fetchMessageHistory(10, {}, sevenDaysAgo.getTime());
-    client._phone = client._sock.user?.id.split(":")[0] || "";
+    client._logger.info(`(handleConnectionUpdate) Connection opened successfully! phone: ${phone}`);
+    client.resetConnAttempts();
+    client.phone = phone;
 
     client._ev.emit({
       type: "auth-success",
       clientId: client.clientId,
-      phoneNumber: client._phone,
+      phoneNumber: client.phone,
     });
   }
 
-  const errStatusCode = (update.lastDisconnect?.error as any)?.output?.statusCode;
+  const errStatusCode = (update.lastDisconnect?.error as Boom)?.output?.statusCode;
   const isRestartRequired = errStatusCode === DisconnectReason.restartRequired;
 
   if (update.connection === "close" && isRestartRequired) {
-    // Resetar contador se passou tempo suficiente
-    if (shouldResetAttempts(client._lastReconnectTime)) {
-      client._reconnectAttempts = 0;
-      logger.log("Reset de contador de reconexão (passou tempo suficiente)");
+    client._logger.warn(`(handleConnectionUpdate) Connection closed with restart required. Status code: ${errStatusCode}`);
+
+    if (shouldResetAttempts(client.lastReconnectTime)) {
+      client.reconnectAttempts = 0;
+      client._logger.info("(handleConnectionUpdate) Reset de contador de reconexão (passou tempo suficiente)");
     }
 
-    // Calcular delay com backoff exponencial
-    const delay = calculateReconnectDelay(client._reconnectAttempts);
-    logger.log(`Socket restart required. Tentativa ${client._reconnectAttempts + 1}, aguardando ${delay}ms antes de reconectar...`);
+    const delay = calculateReconnectDelay(client.reconnectAttempts);
+    client._logger.info(`(handleConnectionUpdate) Socket restart required. Tentativa ${client.reconnectAttempts + 1}, aguardando ${delay}ms antes de reconectar...`);
 
     await sleep(delay);
 
-    client._reconnectAttempts++;
-    client._lastReconnectTime = Date.now();
+    client.reconnectAttempts++;
+    client.lastReconnectTime = Date.now();
 
-    logger.log("Reinicializando socket...");
-    client._sock = await makeNewSocket(client.sessionId, client._storage);
+    client._logger.info("(handleConnectionUpdate) Reinicializando socket...");
+    client._sock = await makeNewSocket({ auth: client._auth, store: client._store, logger: client._logger });
     client.bindEvents();
-    logger.log("Socket reinicializado com sucesso");
+    client._logger.info("(handleConnectionUpdate) Socket reinicializado com sucesso");
   }
   if (update.connection === "close" && !isRestartRequired) {
-    client._storage.clearAuthState(client.sessionId);
-    logger.log("Logged out, cleared auth state from storage");
+    client._auth.removeCredentials();
+    client._logger.info("(handleConnectionUpdate) Logged out, cleared auth state from storage");
 
-    // Aplicar delay também no logout para evitar reconexão agressiva
     const delay = 5000;
-    logger.log(`Aguardando ${delay}ms antes de reinicializar após logout...`);
+    client._logger.info(`(handleConnectionUpdate) Aguardando ${delay}ms antes de reinicializar após logout...`);
     await sleep(delay);
 
-    client._sock = await makeNewSocket(client.sessionId, client._storage);
+    client._sock = await makeNewSocket({ auth: client._auth, store: client._store, logger: client._logger });
     client.bindEvents();
-    logger.log("Socket reinitialized after logout");
+    client._logger.info("(handleConnectionUpdate) Socket reinicializado após logout");
   }
 }
 

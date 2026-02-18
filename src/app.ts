@@ -1,8 +1,10 @@
+import "dotenv/config";
 import ExpressApi from "./api";
-import MySQLDataClient from "./modules/data/mysql-data-client";
 import HttpWppEventEmitter from "./modules/events/emitter/http-emitter";
 import BaileysWhatsappClient from "./modules/whatsapp/clients/baileys-client/baileys-whatsapp-client";
-import { config } from "dotenv";
+import PrismaBaileysStore from "./modules/whatsapp/clients/baileys-client/store/prisma-baileys-store";
+import { PrismaLogger } from "./modules/whatsapp/clients/baileys-client/logger/prisma-logger";
+import PrismaBaileysAuth from "./modules/whatsapp/clients/baileys-client/auth/prisma-baileys-auth";
 
 // Handlers globais para erros não capturados
 process.on('unhandledRejection', (reason, promise) => {
@@ -13,33 +15,28 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
   console.error('Stack:', error.stack);
-  // Não fazer exit aqui para manter o servidor rodando
 });
 
 async function runApp() {
-  config();
-
   const endpoints = process.env["WPP_EVENT_ENDPOINTS"]?.split(",");
-  const mysqlHost = process.env["MYSQL_HOST"] || "localhost";
-  const mysqlPort = parseInt(process.env["MYSQL_PORT"] || "3306", 10);
-  const mysqlUser = process.env["MYSQL_USER"];
-  const mysqlPassword = process.env["MYSQL_PASSWORD"];
-  const mysqlDatabase = process.env["MYSQL_DATABASE"] || "wwebjs-api";
-  const instanceName = process.env["INSTANCE_NAME"];
+  const instance = process.env["INSTANCE_NAME"];
   const clientId = process.env["CLIENT_ID"] ? parseInt(process.env["CLIENT_ID"], 10) : null;
   const sessionId =
-    process.env["SESSION_ID"] || (instanceName && clientId !== null ? `${instanceName}-${clientId}` : null);
+    process.env["SESSION_ID"] || (instance && clientId !== null ? `${instance}-${clientId}` : null);
   const listenPort = parseInt(process.env["API_LISTEN_PORT"] || "727", 10);
 
-  if (!mysqlUser || !mysqlPassword) {
-    throw new Error("MYSQL_USER or MYSQL_PASSWORD environment variable is not set");
-  }
+  console.log("Starting application with the following configuration:");
+  console.log(`WPP_EVENT_ENDPOINTS: ${endpoints}`);
+  console.log(`INSTANCE_NAME: ${instance}`);
+  console.log(`CLIENT_ID: ${clientId}`);
+  console.log(`SESSION_ID: ${sessionId}`);
+  console.log(`API_LISTEN_PORT: ${listenPort}`);
 
   if (!endpoints || endpoints.length === 0) {
     throw new Error("WPP_EVENT_ENDPOINTS environment variable is not set or empty");
   }
 
-  if (!instanceName) {
+  if (!instance) {
     throw new Error("INSTANCE_NAME environment variable is not set");
   }
 
@@ -52,8 +49,19 @@ async function runApp() {
   }
 
   const eventEmitter = new HttpWppEventEmitter(endpoints);
-  const dbClient = new MySQLDataClient(mysqlHost, mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase);
-  const wppClient = await BaileysWhatsappClient.build(sessionId, clientId, instanceName, dbClient, eventEmitter);
+  const store = new PrismaBaileysStore(instance, sessionId, clientId,);
+  const logger = new PrismaLogger("info", { sessionId, instance });
+  const auth = await PrismaBaileysAuth.fromSession(sessionId);
+  const wppClient = await BaileysWhatsappClient.build({
+    auth,
+    store,
+    eventEmitter,
+    instance,
+    clientId,
+    sessionId,
+    logger
+  });
+
   const api = ExpressApi.create(wppClient);
   api.listen(listenPort);
 }

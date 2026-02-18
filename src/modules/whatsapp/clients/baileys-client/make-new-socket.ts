@@ -1,26 +1,35 @@
-import makeWASocket, { Browsers } from "baileys";
-import { BaileysLogger } from "./baileys-logger";
-import PrismaBaileysAuth from "./auth/prisma-baileys-auth";
+import makeWASocket, { Browsers, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } from "baileys";
+import BaileysAuth from "./auth/baileys-auth";
+import BaileysStore from "./store/baileys-store";
+import { ILogger } from "baileys/lib/Utils/logger";
 
-const BAILEYS_LOGS_LEVEL = process.env["BAILEYS_LOGS_LEVEL"] || "warn";
+interface MakeNewSocketParams {
+  auth: BaileysAuth;
+  store: BaileysStore;
+  logger: ILogger;
+}
 
-async function makeNewSocket(id: string) {
-  const logger = new BaileysLogger(BAILEYS_LOGS_LEVEL);
-  const authState = await storage.getAuthState(id);
-  const signalStore = await storage.getSignalKeyStore(id);
+async function makeNewSocket({ store, logger, auth }: MakeNewSocketParams) {
+  const { version, error } = await fetchLatestBaileysVersion();
 
-  const auth = await PrismaBaileysAuth.fromSession(id);
+  if (error) {
+    logger.error(error, "Failed to fetch latest Baileys version, using default");
+  }
 
   const socket = makeWASocket({
     logger,
     auth: {
       creds: auth.creds,
-      keys: signalStore,
+      keys: makeCacheableSignalKeyStore(auth.state.keys, logger),
     },
     browser: Browsers.windows("Google Chrome"),
-    cachedGroupMetadata: async (jid) => storage.getGroupMetadata(id, jid),
-    getMessage: async (key) => storage.getRawMessage(id, key),
+    cachedGroupMetadata: async (jid) => (await store.getGroup(jid))?.groupMetadata,
+    getMessage: async (key) => (await store.getMessage(key.id!)).messageData,
+    enableAutoSessionRecreation: true,
+    ...(version ? { version } : {}),
   });
+
+  store.bind(socket.ev);
 
   return socket;
 }

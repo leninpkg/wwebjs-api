@@ -20,7 +20,8 @@ class PrismaBaileysAuth implements BaileysAuth {
   private static parse(value: any): any {
     if (!value) return null;
     try {
-      const raw = typeof value === 'object' ? JSON.stringify(value) : value;
+      // O Prisma já retorna o objeto do campo Json, então só precisamos aplicar o reviver
+      const raw = JSON.stringify(value);
       return JSON.parse(raw, BufferJSON.reviver);
     } catch (error) {
       Logger.error('Failed to parse data:', error as Error);
@@ -48,37 +49,51 @@ class PrismaBaileysAuth implements BaileysAuth {
   private async writeData(key: string, value: any) {
     this.debug(`${key} | <${typeof value}>:`, value);
 
-    const isObject = typeof value === "object" && value !== null;
-    const valueFixed = isObject ? JSON.stringify(value, BufferJSON.replacer) : value as string;
+    // O Prisma espera um objeto JavaScript para campos Json, não uma string
+    // Usamos JSON.parse/stringify com replacer para serializar Buffers corretamente
+    const valueFixed = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
 
-    await prisma.baileysAuth.upsert({
-      create: {
-        sessionId: this.sessionId,
-        key,
-        value: valueFixed
-      },
-      update: {
-        value: valueFixed
-      },
-      where: {
-        uq_baileys_data_session_id_key: {
+    try {
+      await prisma.baileysAuth.upsert({
+        create: {
           sessionId: this.sessionId,
-          key
+          key,
+          value: valueFixed
+        },
+        update: {
+          value: valueFixed
+        },
+        where: {
+          uq_baileys_data_session_id_key: {
+            sessionId: this.sessionId,
+            key
+          }
         }
-      }
-    });
+      });
+    } catch (error) {
+      Logger.error(`Failed to write data for key ${key}:`, error as Error);
+      throw error;
+    }
   }
 
   private async removeData(key: string) {
     this.debug(`Removing key: ${key}`);
-    await prisma.baileysAuth.delete({
-      where: {
-        uq_baileys_data_session_id_key: {
-          sessionId: this.sessionId,
-          key
+    try {
+      await prisma.baileysAuth.delete({
+        where: {
+          uq_baileys_data_session_id_key: {
+            sessionId: this.sessionId,
+            key
+          }
         }
+      });
+    } catch (error) {
+      // Ignora erro se o registro não existir
+      if ((error as any).code !== 'P2025') {
+        Logger.error(`Failed to remove data for key ${key}:`, error as Error);
+        throw error;
       }
-    });
+    }
   }
 
   public async saveCredentials() {
@@ -127,7 +142,15 @@ class PrismaBaileysAuth implements BaileysAuth {
             for (const id in data[category as keyof SignalDataTypeMap]) {
               const key = `${category}-${id}`;
               const value = data[category as keyof SignalDataTypeMap]![id];
-              tasks.push(value ? this.writeData(key, value) : this.removeData(key));
+              const task = value ? this.writeData(key, value) : this.removeData(key);
+              // Encapsula cada task para capturar erros individualmente
+              tasks.push(
+                task.catch((error) => {
+                  Logger.error(`Failed to process key ${key}:`, error);
+                  // Re-throw para que o Baileys saiba que falhou
+                  throw error;
+                })
+              );
             }
           }
 

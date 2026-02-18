@@ -1,5 +1,7 @@
-import { BaileysEventEmitter, Chat, Contact, GroupMetadata, WAMessageKey } from "baileys";
-import { RawMessage } from "../../../../../generated/prisma/client";
+import { BaileysEventEmitter, Chat, WAMessage, WAMessageKey } from "baileys";
+import { RawContact, RawGroupMetadata, RawMessage } from "../../../types";
+import BaileysWhatsappClient from "../baileys-whatsapp-client";
+import { MessageFile } from "../types";
 
 export interface GetMessagesOptions {
   startTime?: Date;
@@ -15,12 +17,15 @@ abstract class BaileysStore {
   abstract getMessage(id: string): Promise<RawMessage>;
   abstract getMessages(startTime?: Date, endTime?: Date): Promise<RawMessage[]>;
   abstract getMessagesByChat(options: GetMessagesByChatOptions): Promise<RawMessage[]>;
-  abstract getGroups(): Promise<GroupMetadata[]>;
-  abstract getContacts(): Promise<Contact[]>;
+  abstract getGroup(jid: string): Promise<RawGroupMetadata | null>;
+  abstract getGroups(): Promise<RawGroupMetadata[]>;
+  abstract getContacts(): Promise<RawContact[]>;
   abstract getChats(): Promise<Chat[]>;
-  abstract getContactByJid(jid: string): Promise<Contact | null>;
-  abstract getContactByPhone(phone: string): Promise<Contact | null>;
-  abstract getContactByKey(key: WAMessageKey): Promise<Contact | null>;
+  abstract getContactByLid(jid: string): Promise<RawContact | null>;
+  abstract getContactByPhone(phone: string): Promise<RawContact | null>;
+  abstract getContactByKey(key: WAMessageKey): Promise<RawContact | null>;
+  abstract setClient(client: BaileysWhatsappClient): void;
+  abstract getOrDownloadMessageMedia(message: WAMessage): Promise<MessageFile>;
 }
 
 export default BaileysStore;
