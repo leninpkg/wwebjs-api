@@ -20,8 +20,8 @@ const logger: ILogger = {
       console.log(`[INFO]`, msg);
     }
   },
-  child: (msg) => {
-    console.log(`[CHILD LOGGER]`, msg);
+  child: (_msg) => {
+    // console.log(`[CHILD LOGGER]`, msg);
     return logger;
   },
   debug: () => { },

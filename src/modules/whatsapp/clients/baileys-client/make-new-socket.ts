@@ -21,6 +21,7 @@ async function makeNewSocket(id: string, storage: DataClient) {
     cachedGroupMetadata: async (jid) => storage.getGroupMetadata(id, jid),
     getMessage: async (key) => storage.getRawMessage(id, key),
     syncFullHistory,
+    version: [2, 3000, 1033105955]
   });
 
   return socket;
