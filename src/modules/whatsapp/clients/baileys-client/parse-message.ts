@@ -1,14 +1,15 @@
-import { FileDirType } from "@in.pulse-crm/sdk";
-import { downloadMediaMessage, proto, WAMessage, WAMessageKey } from "baileys";
+import { proto, WAMessage, WAMessageKey } from "baileys";
 import ProcessingLogger from "../../../../helpers/processing-logger";
-import filesService from "../../../files/files.service";
 import InpulseMessage from "../../inpulse-types";
+import RawMessageFileRepository from "./store/repositories/raw-message-file-repository";
+import MediaService from "./store/services/media-service";
 
 type MessageType = "chat" | "image" | "video" | "audio" | "document" | "sticker" | "contact" | "location" | "call" | "unsupported";
 
 interface ParseMessageParams {
   message: WAMessage;
   instance: string;
+  sessionId: string;
   clientId: number;
   phone: string;
   logger: ProcessingLogger;
@@ -33,7 +34,7 @@ interface FileMessageContent extends MessageContent {
   isFile: true;
 }
 
-async function parseMessage({ message, instance, clientId, phone, logger }: ParseMessageParams): Promise<InpulseMessage> {
+async function parseMessage({ message, instance, sessionId, clientId, phone, logger }: ParseMessageParams): Promise<InpulseMessage> {
   logger.log("Parsing message", message);
   const { isFile, contactName, quotedMessageId, ...content } = getMessageContent(message, logger);
   logger.log("Extracted message content", content);
@@ -62,9 +63,10 @@ async function parseMessage({ message, instance, clientId, phone, logger }: Pars
 
   if (isFile) {
     logger.log("Processing file message", { fileName: (content as FileMessageContent).fileName });
-    const uploadedFile = await processMediaFile(instance, message, content as FileMessageContent, logger);
-    logger.log("Uploaded file", uploadedFile);
-    return { ...parsedMessage, fileId: uploadedFile.id };
+    const mediaService = new MediaService(instance, sessionId, new RawMessageFileRepository());
+    const savedMedia = await mediaService.getOrDownloadMessageMedia(message);
+    logger.log("Media processed", savedMedia);
+    return { ...parsedMessage, fileId: savedMedia.inpulseId ?? null };
   }
 
   return parsedMessage;
@@ -362,31 +364,6 @@ function getIsForwarded(message: WAMessage): boolean {
 
 function getMessageQuotedId(message: WAMessage): string | null {
   return message.message?.extendedTextMessage?.contextInfo?.stanzaId || null;
-}
-
-async function processMediaFile(instance: string, message: WAMessage, content: FileMessageContent, logger: ProcessingLogger) {
-  logger.debug("Downloading media message", { fileName: content.fileName, fileSize: content.fileSize });
-
-  const mediaBuffer = await downloadMediaMessage(message, "buffer", {});
-
-  logger.debug("Media downloaded, uploading to storage", { bufferSize: mediaBuffer.length });
-
-  try {
-    const uploadedFile = await filesService.uploadFile({
-      buffer: mediaBuffer,
-      fileName: content.fileName,
-      mimeType: content.fileType,
-      dirType: FileDirType.PUBLIC,
-      instance,
-    });
-
-    logger.debug("Media uploaded", { fileId: uploadedFile.id });
-
-    return uploadedFile;
-  } catch (err) {
-    logger.debug("Error uploading media file", err);
-    throw new Error("Failed to upload media file");
-  }
 }
 
 export default parseMessage;

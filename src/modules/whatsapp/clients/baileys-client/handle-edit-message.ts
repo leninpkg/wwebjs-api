@@ -65,6 +65,7 @@ async function handleEditMessage({ client, options, logger }: EditMessageContext
   const parsedMessage = parseMessage({
     message: editedMsg,
     instance: client.instance,
+    sessionId: client.sessionId,
     clientId: client.clientId,
     phone: client.phone,
     logger

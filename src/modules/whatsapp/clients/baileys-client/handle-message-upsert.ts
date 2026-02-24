@@ -66,6 +66,7 @@ async function handleMessageUpsert({ messages, type, client, logger }: MessageUp
         const parsedMessage = await parseMessage({
           message,
           instance: client.instance,
+          sessionId: client.sessionId,
           clientId: client.clientId,
           phone: client.phone,
           logger,

@@ -90,6 +90,7 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
     const parsedMessage = parseMessage({
       message,
       instance: client.instance,
+      sessionId: client.sessionId,
       clientId: client.clientId,
       phone: client.phone,
       logger,
