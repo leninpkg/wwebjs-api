@@ -1,7 +1,7 @@
 import { downloadMediaMessage, WAMessage } from "baileys";
-import uploadFile from "../../../../../files/upload-file";
-import { extractMessageType } from "../../helpers/get-message-type";
-import { MessageFile } from "../../types";
+import uploadFile from "../../../../../../files/upload-file";
+import { extractMessageType } from "../../../helpers/get-message-type";
+import { MessageFile } from "../../../types";
 import RawMessageFileRepository from "../repositories/raw-message-file-repository";
 
 interface UploadedFileLike {
@@ -18,7 +18,7 @@ class MediaService {
     private readonly rawMessageFileRepository: RawMessageFileRepository,
   ) { }
 
-  public async getOrDownloadMessageMedia(message: WAMessage): Promise<MessageFile> {
+  public async getMessageMedia(message: WAMessage): Promise<MessageFile> {
     const messageId = message.key.id;
 
     if (!messageId) {

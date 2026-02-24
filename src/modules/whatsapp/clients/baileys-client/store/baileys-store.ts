@@ -1,7 +1,5 @@
 import { BaileysEventEmitter, Chat, WAMessage, WAMessageKey } from "baileys";
-import { RawContact, RawGroupMetadata, RawMessage } from "../../../types";
-import BaileysWhatsappClient from "../baileys-whatsapp-client";
-import { MessageFile } from "../types";
+import { MessageFile, RawContact, RawGroupMetadata, RawMessage } from "../types";
 
 export interface GetMessagesOptions {
   startTime?: Date;
@@ -14,7 +12,7 @@ export interface GetMessagesByChatOptions extends GetMessagesOptions {
 
 abstract class BaileysStore {
   abstract bind(ev: BaileysEventEmitter): void;
-  abstract getMessage(id: string): Promise<RawMessage>;
+  abstract getMessage(id: string): Promise<RawMessage | null>;
   abstract getMessages(startTime?: Date, endTime?: Date): Promise<RawMessage[]>;
   abstract getMessagesByChat(options: GetMessagesByChatOptions): Promise<RawMessage[]>;
   abstract getGroup(jid: string): Promise<RawGroupMetadata | null>;
@@ -24,8 +22,7 @@ abstract class BaileysStore {
   abstract getContactByLid(jid: string): Promise<RawContact | null>;
   abstract getContactByPhone(phone: string): Promise<RawContact | null>;
   abstract getContactByKey(key: WAMessageKey): Promise<RawContact | null>;
-  abstract setClient(client: BaileysWhatsappClient): void;
-  abstract getOrDownloadMessageMedia(message: WAMessage): Promise<MessageFile>;
+  abstract getMessageMedia(message: WAMessage): Promise<MessageFile>;
 }
 
 export default BaileysStore;

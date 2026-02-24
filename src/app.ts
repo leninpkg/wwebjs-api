@@ -2,7 +2,7 @@ import "dotenv/config";
 import ExpressApi from "./api";
 import HttpWppEventEmitter from "./modules/events/emitter/http-emitter";
 import BaileysWhatsappClient from "./modules/whatsapp/clients/baileys-client/baileys-whatsapp-client";
-import PrismaBaileysStore from "./modules/whatsapp/clients/baileys-client/store/prisma-baileys-store";
+import PrismaBaileysStore from "./modules/whatsapp/clients/baileys-client/store/prisma-baileys-store/prisma-baileys-store";
 import { PrismaLogger } from "./modules/whatsapp/clients/baileys-client/logger/prisma-logger";
 import PrismaBaileysAuth from "./modules/whatsapp/clients/baileys-client/auth/prisma-baileys-auth";
 

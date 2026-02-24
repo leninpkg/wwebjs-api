@@ -33,9 +33,9 @@ model BaileysAuth {
 model RawGroupMetadata {
   id        String @id
   remoteJid String @map("remote_jid")
+  sessionId String @map("session_id")
 
   instance  String
-  sessionId String   @map("session_id")
   metadata  Json     @map("metadata")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -84,7 +84,7 @@ model RawContact {
   id           String   @id
   sessionId    String   @map("session_id")
   instance     String
-  phoneNumber  String   @map("phone_number") @db.VarChar(50)
+  phoneNumber  String?  @map("phone_number") @db.VarChar(50)
   name         String?  @db.VarChar(255)
   notify       String?  @db.VarChar(255)
   verifiedName String?  @db.VarChar(255)

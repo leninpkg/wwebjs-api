@@ -2,7 +2,7 @@ import { proto, WAMessage, WAMessageKey } from "baileys";
 import ProcessingLogger from "../../../../helpers/processing-logger";
 import InpulseMessage from "../../inpulse-types";
 import RawMessageFileRepository from "./store/repositories/raw-message-file-repository";
-import MediaService from "./store/services/media-service";
+import MediaService from "./store/prisma-baileys-store/services/media-service";
 
 type MessageType = "chat" | "image" | "video" | "audio" | "document" | "sticker" | "contact" | "location" | "call" | "unsupported";
 
@@ -64,7 +64,7 @@ async function parseMessage({ message, instance, sessionId, clientId, phone, log
   if (isFile) {
     logger.log("Processing file message", { fileName: (content as FileMessageContent).fileName });
     const mediaService = new MediaService(instance, sessionId, new RawMessageFileRepository());
-    const savedMedia = await mediaService.getOrDownloadMessageMedia(message);
+    const savedMedia = await mediaService.getMessageMedia(message);
     logger.log("Media processed", savedMedia);
     return { ...parsedMessage, fileId: savedMedia.inpulseId ?? null };
   }

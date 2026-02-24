@@ -1,5 +1,6 @@
 import { BufferJSON, proto } from "baileys";
-import { prisma } from "../../../../../../prisma";
+import { prisma } from "../../../../../../../prisma";
+import resolveJson from "../resolve-json";
 
 interface UpsertRawMessageInput {
   id: string;
@@ -7,17 +8,17 @@ interface UpsertRawMessageInput {
   remoteJid: string;
   keyData: proto.IMessageKey;
   messageData: proto.IMessage;
-  useBufferJSON?: boolean;
 }
 
 class RawMessageRepository {
   constructor(
     private readonly sessionId: string,
     private readonly instance: string,
-  ) {}
+  ) { }
 
   public async upsert(input: UpsertRawMessageInput): Promise<void> {
-    const useBufferJSON = input.useBufferJSON ?? true;
+    const keyData = JSON.stringify(input.keyData, BufferJSON.replacer);
+    const messageData = JSON.stringify(input.messageData, BufferJSON.replacer);
 
     await prisma.rawMessage.upsert({
       where: { id: input.id },
@@ -27,25 +28,31 @@ class RawMessageRepository {
         timestamp: input.timestamp,
         remoteJid: input.remoteJid,
         sessionId: this.sessionId,
-        keyData: this.stringify(input.keyData, useBufferJSON),
-        messageData: this.stringify(input.messageData, useBufferJSON),
+        keyData,
+        messageData,
       },
-      update: {
-        keyData: this.stringify(input.keyData, useBufferJSON),
-        messageData: this.stringify(input.messageData, useBufferJSON),
-      },
+      update: { keyData, messageData },
     });
   }
 
   public async findById(id: string) {
-    return prisma.rawMessage.findUnique({ where: { id } });
+    const message = await prisma.rawMessage.findUnique({ where: { id } });
+    if (!message) return null;
+
+    const keyData = resolveJson<proto.IMessageKey>(message.keyData);
+    const messageData = resolveJson<proto.IMessage>(message.messageData);
+
+    return { ...message, keyData, messageData };
   }
 
   public async updateMessageData(id: string, messageData: proto.IMessage): Promise<void> {
+    const string = JSON.stringify(messageData, BufferJSON.replacer);
+    const object = JSON.parse(string);
+
     await prisma.rawMessage.update({
       where: { id },
       data: {
-        messageData: JSON.stringify(messageData),
+        messageData: JSON.stringify(object, BufferJSON.replacer),
       },
     });
   }
@@ -80,18 +87,16 @@ class RawMessageRepository {
       }
     }
 
-    return prisma.rawMessage.findMany({
+    const messages = await prisma.rawMessage.findMany({
       where,
       orderBy: { timestamp: "asc" },
     });
-  }
 
-  private stringify(value: unknown, useBufferJSON: boolean): string {
-    if (useBufferJSON) {
-      return JSON.stringify(value, BufferJSON.replacer);
-    }
-
-    return JSON.stringify(value);
+    return messages.map(message => {
+      const keyData = resolveJson<proto.IMessageKey>(message.keyData);
+      const messageData = resolveJson<proto.IMessage>(message.messageData);
+      return { ...message, keyData, messageData };
+    });
   }
 }
 

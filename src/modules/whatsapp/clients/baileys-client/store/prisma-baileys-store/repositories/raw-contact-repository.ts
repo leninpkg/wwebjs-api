@@ -1,8 +1,8 @@
 import { Contact } from "baileys";
-import { prisma } from "../../../../../../prisma";
+import { prisma } from "../../../../../../../prisma";
 
 interface UpdateRawContactInput {
-  phoneNumber?: string;
+  phoneNumber?: string | null;
   name?: string | null;
   notify?: string | null;
   verifiedName?: string | null;
@@ -12,7 +12,7 @@ interface UpdateRawContactInput {
 
 interface UpsertRawContactInput {
   id: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
   name: string | null;
   notify: string | null;
   verifiedName: string | null;
@@ -24,7 +24,7 @@ class RawContactRepository {
   constructor(
     private readonly sessionId: string,
     private readonly instance: string,
-  ) {}
+  ) { }
 
   public async findById(id: string) {
     return prisma.rawContact.findFirst({
@@ -71,12 +71,13 @@ class RawContactRepository {
   }
 
   public async findMany() {
-    return prisma.rawContact.findMany({
+    const contacts = await prisma.rawContact.findMany({
       where: {
         sessionId: this.sessionId,
         instance: this.instance,
       },
     });
+    return contacts.map(contact => this.mapToRawContact(contact));
   }
 
   public async findByPossibleIds(possibleIds: string[]) {
@@ -105,7 +106,7 @@ class RawContactRepository {
     id: string;
     instance: string;
     sessionId: string;
-    phoneNumber: string;
+    phoneNumber: string | null;
     name: string | null;
     verifiedName: string | null;
     imgUrl: string | null;

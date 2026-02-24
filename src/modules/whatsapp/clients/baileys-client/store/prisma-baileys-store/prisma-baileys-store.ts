@@ -1,12 +1,10 @@
 import { BaileysEventEmitter, BaileysEventMap, Chat, Contact, GroupMetadata, proto, WAMessage, WAMessageKey } from "baileys";
-import onlyDigits from "../../../../../helpers/only-digits";
-import { RawContact, RawGroupMetadata, RawMessage } from "../../../types";
-import BaileysWhatsappClient from "../baileys-whatsapp-client";
-import { extractLidFromKey } from "../helpers/extract-lid-from-key";
-import { extractPhoneFromKey } from "../helpers/extract-phone-from-key";
-import shouldIgnoreMessage from "../helpers/should-ignore-message";
-import { MessageFile, MessageUpdateEvent, MessageUpsertEvent } from "../types";
-import BaileysStore, { GetMessagesByChatOptions } from "./baileys-store";
+import onlyDigits from "../../../../../../helpers/only-digits";
+import { extractLidFromKey } from "../../helpers/extract-lid-from-key";
+import { extractPhoneFromKey } from "../../helpers/extract-phone-from-key";
+import shouldIgnoreMessage from "../../helpers/should-ignore-message";
+import { MessageFile, MessageUpdateEvent, MessageUpsertEvent, RawContact, RawGroupMetadata, RawMessage } from "../../types";
+import BaileysStore, { GetMessagesByChatOptions } from "../baileys-store";
 import RawContactRepository, { UpdateRawContactInput } from "./repositories/raw-contact-repository";
 import RawGroupMetadataRepository from "./repositories/raw-group-metadata-repository";
 import RawMessageFileRepository from "./repositories/raw-message-file-repository";
@@ -14,7 +12,6 @@ import RawMessageRepository from "./repositories/raw-message-repository";
 import MediaService from "./services/media-service";
 
 class PrismaBaileysStore implements BaileysStore {
-  private client: BaileysWhatsappClient | null = null;
   private readonly rawMessageRepository: RawMessageRepository;
   private readonly rawContactRepository: RawContactRepository;
   private readonly rawGroupMetadataRepository: RawGroupMetadataRepository;
@@ -23,7 +20,6 @@ class PrismaBaileysStore implements BaileysStore {
   constructor(
     private readonly instance: string,
     private readonly sessionId: string,
-    private readonly clientId: number,
   ) {
     this.rawMessageRepository = new RawMessageRepository(this.sessionId, this.instance);
     this.rawContactRepository = new RawContactRepository(this.sessionId, this.instance);
@@ -57,7 +53,6 @@ class PrismaBaileysStore implements BaileysStore {
         remoteJid: data.key.remoteJid!,
         keyData: data.key,
         messageData: data.message || {},
-        useBufferJSON: true,
       });
     }
   }
@@ -67,10 +62,6 @@ class PrismaBaileysStore implements BaileysStore {
       const existing = await this.rawMessageRepository.findById(update.key.id!);
 
       if (!existing) continue;
-
-      console.log("Updating message in store:", update.key.id);
-      console.log("Update data:", update.update);
-      console.log(`Existing data <${typeof existing.messageData}>:`, existing);
 
       const messageData = typeof existing.messageData === "object" ? existing.messageData as proto.IMessage : {};
       const updatedMessageData = { ...messageData, ...update.update.message };
@@ -82,7 +73,6 @@ class PrismaBaileysStore implements BaileysStore {
   private async handleHistorySet(data: BaileysEventMap["messaging-history.set"]) {
     console.log(`[Store] History set received: ${data.messages.length} messages, ${data.chats?.length || 0} chats, ${data.contacts?.length || 0} contacts`);
 
-    // Processar mensagens do histórico
     for (const message of data.messages) {
       if (shouldIgnoreMessage(message)) continue;
 
@@ -92,7 +82,6 @@ class PrismaBaileysStore implements BaileysStore {
         remoteJid: message.key.remoteJid!,
         keyData: message.key,
         messageData: message.message || {},
-        useBufferJSON: false,
       });
     }
 
@@ -124,11 +113,7 @@ class PrismaBaileysStore implements BaileysStore {
       if (typeof contact.verifiedName !== "undefined") data.verifiedName = contact.verifiedName;
       if (typeof contact.imgUrl !== "undefined") data.imgUrl = contact.imgUrl;
       if (typeof contact.status !== "undefined") data.status = contact.status;
-
-      const phoneNumber = this.extractPhoneNumber(contact.id);
-      if (phoneNumber) {
-        data.phoneNumber = phoneNumber;
-      }
+      if (typeof contact.phoneNumber !== "undefined") data.phoneNumber = contact.phoneNumber;
 
       if (Object.keys(data).length === 0) continue;
 
@@ -140,11 +125,10 @@ class PrismaBaileysStore implements BaileysStore {
     console.log(`[Store] Contacts upsert: ${contacts.length} contacts`);
 
     for (const contact of contacts) {
-      const phoneNumber = this.extractPhoneNumber(contact.id);
 
       await this.rawContactRepository.upsert({
         id: contact.id,
-        phoneNumber,
+        phoneNumber: contact.phoneNumber || null,
         name: contact.name || null,
         notify: contact.notify || null,
         verifiedName: contact.verifiedName || null,
@@ -171,11 +155,9 @@ class PrismaBaileysStore implements BaileysStore {
       if (!group.id) continue;
 
       const existing = await this.rawGroupMetadataRepository.findByRemoteJid(group.id);
-
       if (!existing) continue;
 
-      const existingMetadata = JSON.parse(existing.metadata as string) as GroupMetadata;
-      const updatedMetadata = { ...existingMetadata, ...group };
+      const updatedMetadata = { ...existing.groupMetadata, ...group };
 
       await this.rawGroupMetadataRepository.updateMetadata(existing.id, updatedMetadata);
     }
@@ -196,17 +178,7 @@ class PrismaBaileysStore implements BaileysStore {
       throw new Error(`Message with id ${id} not found`);
     }
 
-    return {
-      id: message.id,
-      instance: message.instance,
-      sessionId: message.sessionId,
-      remoteJid: message.remoteJid,
-      timestamp: message.timestamp,
-      keyData: JSON.parse(message.keyData as string) as proto.IMessageKey,
-      messageData: JSON.parse(message.messageData as string) as proto.IMessage,
-      createdAt: message.createdAt,
-      updatedAt: message.updatedAt,
-    };
+    return message;
   }
 
   public async getMessages(startTime?: Date, endTime?: Date): Promise<RawMessage[]> {
@@ -242,41 +214,15 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public async getGroup(jid: string): Promise<RawGroupMetadata | null> {
-    const group = await this.rawGroupMetadataRepository.findByRemoteJid(jid);
-
-    if (!group) {
-      return null;
-    }
-
-    return {
-      id: group.id,
-      instance: group.instance,
-      sessionId: group.sessionId,
-      remoteJid: group.remoteJid,
-      groupMetadata: JSON.parse(group.metadata as string) as GroupMetadata,
-      createdAt: group.createdAt,
-      updatedAt: group.updatedAt,
-    };
+    return await this.rawGroupMetadataRepository.findByRemoteJid(jid);
   }
 
   public async getGroups(): Promise<RawGroupMetadata[]> {
-    const groups = await this.rawGroupMetadataRepository.findMany();
-
-    return groups.map((group) => ({
-      id: group.id,
-      instance: group.instance,
-      sessionId: group.sessionId,
-      remoteJid: group.remoteJid,
-      groupMetadata: JSON.parse(group.metadata as string) as GroupMetadata,
-      createdAt: group.createdAt,
-      updatedAt: group.updatedAt,
-    }));
+    return await this.rawGroupMetadataRepository.findMany();
   }
 
   public async getContacts(): Promise<RawContact[]> {
-    const contacts = await this.rawContactRepository.findMany();
-
-    return contacts.map((contact) => this.rawContactRepository.mapToRawContact(contact));
+    return await this.rawContactRepository.findMany();
   }
 
   public async getChats(): Promise<Chat[]> {
@@ -297,50 +243,30 @@ class PrismaBaileysStore implements BaileysStore {
 
   public async getContactByPhone(_phone: string): Promise<RawContact | null> {
     const normalizedPhone = onlyDigits(_phone);
-
-    if (!normalizedPhone) {
-      return null;
-    }
-
     const contact = await this.rawContactRepository.findByPhone(normalizedPhone);
 
-    if (!contact) {
-      return null;
-    }
-
-    return this.rawContactRepository.mapToRawContact(contact);
+    return contact ? this.rawContactRepository.mapToRawContact(contact) : null;
   }
 
   public async getContactByKey(_key: WAMessageKey): Promise<RawContact | null> {
     const lid = extractLidFromKey(_key);
-
-    if (lid) {
-      const lidContact = await this.getContactByLid(lid);
-      if (lidContact) {
-        return lidContact;
-      }
-    }
-
     const phone = extractPhoneFromKey(_key);
 
-    if (phone) {
-      return this.getContactByPhone(phone);
+    const phoneContact = phone ? await this.getContactByPhone(phone) : null;
+    if (phoneContact) {
+      return phoneContact;
+    }
+
+    const lidContact = await this.getContactByLid(lid!);
+    if (lidContact) {
+      return lidContact;
     }
 
     return null;
   }
 
-  private extractPhoneNumber(jid: string): string {
-    const localPart = jid.split("@")[0] || "";
-    return onlyDigits(localPart);
-  }
-
-  public setClient(client: BaileysWhatsappClient): void {
-    this.client = client;
-  }
-
-  public async getOrDownloadMessageMedia(message: WAMessage): Promise<MessageFile> {
-    return this.mediaService.getOrDownloadMessageMedia(message);
+  public async getMessageMedia(message: WAMessage): Promise<MessageFile> {
+    return await this.mediaService.getMessageMedia(message);
   }
 }
 

@@ -1,4 +1,4 @@
-import { BaileysEventMap, proto } from "baileys";
+import { BaileysEventMap, proto, Contact, GroupMetadata } from "baileys";
 
 export type ProcessingStatus = "processing" | "success" | "failed";
 
@@ -53,3 +53,35 @@ export type FullRawMessage = Message;
 export type MessageUpsertEvent = BaileysEventMap["messages.upsert"];
 export type MessageUpdateEvent = BaileysEventMap["messages.update"];
 export type MessageDeleteEvent = BaileysEventMap["messages.delete"];
+export interface RawMessage {
+  id: string;
+  instance: string;
+  sessionId: string;
+  remoteJid: string;
+  timestamp: string;
+  keyData: proto.IMessageKey
+  messageData: proto.IMessage;
+  createdAt?: Date;
+  updatedAt?: Date | null;
+}
+
+export interface RawGroupMetadata {
+  id: string;
+  instance: string;
+  sessionId: string;
+  remoteJid: string;
+  groupMetadata: GroupMetadata;
+  createdAt?: Date;
+  updatedAt?: Date | null;
+}
+
+export interface RawContact {
+  id: string;
+  instance: string;
+  sessionId: string;
+  phone: string | null;
+  name: string | null;
+  verifiedName: string | null;
+  avatarUrl: string | null;
+  rawData: Contact;
+}
