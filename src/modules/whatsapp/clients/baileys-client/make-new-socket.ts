@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import makeWASocket, { Browsers } from "baileys";
+import makeWASocket, { Browsers, isJidBroadcast, isJidMetaAI, isJidNewsletter, isJidStatusBroadcast, makeCacheableSignalKeyStore } from "baileys";
 import DataClient from "../../../data/data-client";
 import logger from "./logger";
 
@@ -15,11 +15,22 @@ async function makeNewSocket(id: string, storage: DataClient) {
     logger,
     auth: {
       creds: authState.creds,
-      keys: signalStore,
+      keys: makeCacheableSignalKeyStore(signalStore, logger),
     },
     browser: Browsers.windows("Google Chrome"),
     cachedGroupMetadata: async (jid) => storage.getGroupMetadata(id, jid),
     getMessage: async (key) => storage.getRawMessage(id, key),
+    shouldIgnoreJid: jid => {
+      try {
+        if (isJidBroadcast(jid)) return true;
+        if (isJidStatusBroadcast(jid)) return true;
+        if (isJidMetaAI(jid)) return true;
+        if (isJidNewsletter(jid)) return true;
+        return false;
+      } catch {
+        return false;
+      }
+    },
     syncFullHistory,
     version: [2, 3000, 1033105955]
   });
