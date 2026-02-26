@@ -5,6 +5,7 @@ import { ConsoleLogger } from "./console-logger";
 interface LogContext {
   sessionId: string;
   instance: string;
+  correlationId?: string;
 }
 
 export class PrismaLogger extends ConsoleLogger {
@@ -15,6 +16,9 @@ export class PrismaLogger extends ConsoleLogger {
   private context: LogContext;
   private readonly pendingLogs: Array<{
     level: "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+    emittedBy: string;
+    operationName: string | null;
+    correlationId: string | null;
     message: string;
     metadata: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
     sessionId: string;
@@ -24,8 +28,8 @@ export class PrismaLogger extends ConsoleLogger {
   private isFlushing = false;
   private droppedLogs = 0;
 
-  constructor(level: string, context: LogContext) {
-    super(level);
+  constructor(level: string, context: LogContext, defaultEmitter: string = "PrismaLogger") {
+    super(level, defaultEmitter);
     this.context = context;
   }
 
@@ -44,7 +48,14 @@ export class PrismaLogger extends ConsoleLogger {
     }
   }
 
-  private saveLog(level: string, message: string, metadata?: unknown): void {
+  private saveLog(
+    level: string,
+    message: string,
+    metadata?: unknown,
+    emittedBy: string = this.defaultEmitter,
+    operationName?: string,
+    correlationId?: string,
+  ): void {
     if (this.pendingLogs.length >= PrismaLogger.MAX_QUEUE_SIZE) {
       this.droppedLogs += 1;
       return;
@@ -52,6 +63,9 @@ export class PrismaLogger extends ConsoleLogger {
 
     this.pendingLogs.push({
       level: level.toLowerCase() as "trace" | "debug" | "info" | "warn" | "error" | "fatal",
+      emittedBy,
+      operationName: operationName || null,
+      correlationId: correlationId || this.context.correlationId || null,
       message,
       metadata: this.normalizeMetadata(metadata),
       sessionId: this.context.sessionId,
@@ -102,8 +116,14 @@ export class PrismaLogger extends ConsoleLogger {
     }
   }
 
-  public override error(obj: unknown, msg?: string): void {
-    super.error(obj, msg);
+  public override error(
+    obj: unknown,
+    msg?: string,
+    emitter: string = this.defaultEmitter,
+    operationName: string = "unknown",
+    correlationId?: string,
+  ): void {
+    super.error(obj, msg, emitter, operationName);
 
     let message: string;
     let metadata: unknown = null;
@@ -122,12 +142,18 @@ export class PrismaLogger extends ConsoleLogger {
       message = `Error ocurred: ${msg || ""} | ObjType: ${objClassName}`;
       metadata = obj;
     }
-
-    this.saveLog("error", message, metadata);
+    const formattedMsg = ConsoleLogger.formatMessage(message, emitter, operationName);
+    this.saveLog("error", formattedMsg, metadata, emitter, operationName, correlationId);
   }
 
-  public override warn(obj: unknown, msg?: string): void {
-    super.warn(obj, msg);
+  public override warn(
+    obj: unknown,
+    msg?: string,
+    emitter: string = this.defaultEmitter,
+    operationName: string = "unknown",
+    correlationId?: string,
+  ): void {
+    super.warn(obj, msg, emitter, operationName);
 
     let message: string;
     let metadata: unknown = null;
@@ -140,11 +166,18 @@ export class PrismaLogger extends ConsoleLogger {
       metadata = obj;
     }
 
-    this.saveLog("warn", message, metadata);
+    const formattedMsg = ConsoleLogger.formatMessage(message, emitter, operationName);
+    this.saveLog("warn", formattedMsg, metadata, emitter, operationName, correlationId);
   }
 
-  public override info(obj: unknown, msg?: string): void {
-    super.info(obj, msg);
+  public override info(
+    obj: unknown,
+    msg?: string,
+    emitter: string = this.defaultEmitter,
+    operationName: string = "unknown",
+    correlationId?: string,
+  ): void {
+    super.info(obj, msg, emitter, operationName);
 
     let message: string;
     let metadata: unknown = null;
@@ -157,11 +190,18 @@ export class PrismaLogger extends ConsoleLogger {
       metadata = obj;
     }
 
-    this.saveLog("info", message, metadata);
+    const formattedMsg = ConsoleLogger.formatMessage(message, emitter, operationName);
+    this.saveLog("info", formattedMsg, metadata, emitter, operationName, correlationId);
   }
 
-  public override debug(obj: unknown, msg?: string): void {
-    super.debug(obj, msg);
+  public override debug(
+    obj: unknown,
+    msg?: string,
+    emitter: string = this.defaultEmitter,
+    operationName: string = "unknown",
+    correlationId?: string,
+  ): void {
+    super.debug(obj, msg, emitter, operationName);
 
     let message: string;
     let metadata: unknown = null;
@@ -173,11 +213,18 @@ export class PrismaLogger extends ConsoleLogger {
       metadata = obj;
     }
 
-    this.saveLog("debug", message, metadata);
+    const formattedMsg = ConsoleLogger.formatMessage(message, emitter, operationName);
+    this.saveLog("debug", formattedMsg, metadata, emitter, operationName, correlationId);
   }
 
-  public override trace(obj: unknown, msg?: string): void {
-    super.trace(obj, msg);
+  public override trace(
+    obj: unknown,
+    msg?: string,
+    emitter: string = this.defaultEmitter,
+    operationName: string = "unknown",
+    correlationId?: string,
+  ): void {
+    super.trace(obj, msg, emitter, operationName);
 
     let message: string;
     let metadata: unknown = null;
@@ -189,6 +236,7 @@ export class PrismaLogger extends ConsoleLogger {
       metadata = obj;
     }
 
-    this.saveLog("trace", message, metadata);
+    const formattedMsg = ConsoleLogger.formatMessage(message, emitter, operationName, true);
+    this.saveLog("trace", formattedMsg, metadata, emitter, operationName, correlationId);
   }
 }
