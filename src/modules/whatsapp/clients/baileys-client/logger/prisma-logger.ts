@@ -1,4 +1,5 @@
 import { prisma } from "../../../../../prisma";
+import { Prisma } from "../../../../../generated/prisma/client";
 import { ConsoleLogger } from "./console-logger";
 
 interface LogContext {
@@ -7,27 +8,97 @@ interface LogContext {
 }
 
 export class PrismaLogger extends ConsoleLogger {
+  private static readonly FLUSH_INTERVAL_MS = 250;
+  private static readonly BATCH_SIZE = 25;
+  private static readonly MAX_QUEUE_SIZE = 500;
+
   private context: LogContext;
+  private readonly pendingLogs: Array<{
+    level: "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+    message: string;
+    metadata: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
+    sessionId: string;
+    instance: string;
+  }> = [];
+  private flushTimer: NodeJS.Timeout | null = null;
+  private isFlushing = false;
+  private droppedLogs = 0;
 
   constructor(level: string, context: LogContext) {
     super(level);
     this.context = context;
   }
 
-  private async saveLog(level: string, message: string, metadata?: unknown): Promise<void> {
-    try {
-      await prisma.log.create({
-        data: {
-          level: level.toLowerCase() as any,
-          message,
-          metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : null,
-          sessionId: this.context.sessionId,
-          instance: this.context.instance,
-        },
-      });
+  private normalizeMetadata(metadata?: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
+    if (typeof metadata === "undefined" || metadata === null) {
+      return Prisma.JsonNull;
+    }
 
+    try {
+      return JSON.parse(JSON.stringify(metadata));
+    } catch {
+      return {
+        serializationError: "Failed to serialize metadata",
+        metadataType: metadata?.constructor?.name || typeof metadata,
+      };
+    }
+  }
+
+  private saveLog(level: string, message: string, metadata?: unknown): void {
+    if (this.pendingLogs.length >= PrismaLogger.MAX_QUEUE_SIZE) {
+      this.droppedLogs += 1;
+      return;
+    }
+
+    this.pendingLogs.push({
+      level: level.toLowerCase() as "trace" | "debug" | "info" | "warn" | "error" | "fatal",
+      message,
+      metadata: this.normalizeMetadata(metadata),
+      sessionId: this.context.sessionId,
+      instance: this.context.instance,
+    });
+
+    if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => {
+        this.flushLogQueue().catch((error) => {
+          console.error("Failed to flush logs to database:", error);
+        });
+      }, PrismaLogger.FLUSH_INTERVAL_MS);
+    }
+  }
+
+  private async flushLogQueue(): Promise<void> {
+    if (this.isFlushing) {
+      return;
+    }
+
+    this.isFlushing = true;
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    try {
+      while (this.pendingLogs.length > 0) {
+        const batch = this.pendingLogs.splice(0, PrismaLogger.BATCH_SIZE);
+        await prisma.log.createMany({ data: batch });
+      }
+
+      if (this.droppedLogs > 0) {
+        console.warn(`[PrismaLogger] Dropped ${this.droppedLogs} log entries because the queue is full`);
+        this.droppedLogs = 0;
+      }
     } catch (error) {
-      console.error("Failed to save log to database:", error);
+      console.error("Failed to save log batch to database:", error);
+    } finally {
+      this.isFlushing = false;
+      if (this.pendingLogs.length > 0 && !this.flushTimer) {
+        this.flushTimer = setTimeout(() => {
+          this.flushLogQueue().catch((flushError) => {
+            console.error("Failed to flush logs to database:", flushError);
+          });
+        }, PrismaLogger.FLUSH_INTERVAL_MS);
+      }
     }
   }
 
