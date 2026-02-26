@@ -69,7 +69,13 @@ class BaileysWhatsappClient implements WhatsappClient {
   }
 
   public bindEvents() {
+    this._store.bind(this._sock.ev);
+
     this._sock.ev.on("connection.update", (update) => handleConnectionUpdate(update, this));
+  }
+
+  public unbindEvents() {
+    this._sock.ev.removeAllListeners("connection.update");
   }
 
   public static async build(props: BuildBaileysWhatsappClientParams): Promise<BaileysWhatsappClient> {
@@ -89,6 +95,8 @@ class BaileysWhatsappClient implements WhatsappClient {
       _store: props.store,
       _auth: props.auth
     });
+
+    client.bindEvents();
 
     return client;
   }

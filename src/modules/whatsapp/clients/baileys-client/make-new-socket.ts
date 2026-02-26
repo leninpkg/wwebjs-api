@@ -1,7 +1,7 @@
 import makeWASocket, { Browsers, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } from "baileys";
+import { ILogger } from "baileys/lib/Utils/logger";
 import BaileysAuth from "./auth/baileys-auth";
 import BaileysStore from "./store/baileys-store";
-import { ILogger } from "baileys/lib/Utils/logger";
 
 interface MakeNewSocketParams {
   auth: BaileysAuth;
@@ -10,6 +10,7 @@ interface MakeNewSocketParams {
 }
 
 async function makeNewSocket({ store, logger, auth }: MakeNewSocketParams) {
+
   const { version, error } = await fetchLatestBaileysVersion();
 
   if (error) {
@@ -24,12 +25,10 @@ async function makeNewSocket({ store, logger, auth }: MakeNewSocketParams) {
     },
     browser: Browsers.windows("Google Chrome"),
     cachedGroupMetadata: async (jid) => (await store.getGroup(jid))?.groupMetadata,
-    getMessage: async (key) => (await store.getMessage(key.id!)).messageData,
+    getMessage: async (key) => (await store.getMessage(key.id!))?.messageData,
     enableAutoSessionRecreation: true,
     ...(version ? { version } : {}),
   });
-
-  store.bind(socket.ev);
 
   return socket;
 }

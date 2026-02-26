@@ -15,15 +15,6 @@ function calculateReconnectDelay(attempts: number): number {
   return delays[Math.min(attempts, delays.length - 1)] || 4800000;
 }
 
-/**
- * Verifica se já passou tempo suficiente desde a última reconexão
- * Reseta contador se passou mais de 5 minutos
- */
-function shouldResetAttempts(lastReconnectTime: number): boolean {
-  const fiveMinutes = 5 * 60 * 1000;
-  return Date.now() - lastReconnectTime > fiveMinutes;
-}
-
 async function handleConnectionUpdate(update: Partial<ConnectionState>, client: BaileysWhatsappClient) {
   client._logger.debug(update, "(handleConnectionUpdate) Connection update received");
 
@@ -57,11 +48,6 @@ async function handleConnectionUpdate(update: Partial<ConnectionState>, client: 
   if (update.connection === "close" && isRestartRequired) {
     client._logger.warn(`(handleConnectionUpdate) Connection closed with restart required. Status code: ${errStatusCode}`);
 
-    if (shouldResetAttempts(client.lastReconnectTime)) {
-      client.reconnectAttempts = 0;
-      client._logger.info("(handleConnectionUpdate) Reset de contador de reconexão (passou tempo suficiente)");
-    }
-
     const delay = calculateReconnectDelay(client.reconnectAttempts);
     client._logger.info(`(handleConnectionUpdate) Socket restart required. Tentativa ${client.reconnectAttempts + 1}, aguardando ${delay}ms antes de reconectar...`);
 
@@ -71,6 +57,7 @@ async function handleConnectionUpdate(update: Partial<ConnectionState>, client: 
     client.lastReconnectTime = Date.now();
 
     client._logger.info("(handleConnectionUpdate) Reinicializando socket...");
+    client.unbindEvents();
     client._sock = await makeNewSocket({ auth: client._auth, store: client._store, logger: client._logger });
     client.bindEvents();
     client._logger.info("(handleConnectionUpdate) Socket reinicializado com sucesso");
@@ -83,6 +70,7 @@ async function handleConnectionUpdate(update: Partial<ConnectionState>, client: 
     client._logger.info(`(handleConnectionUpdate) Aguardando ${delay}ms antes de reinicializar após logout...`);
     await sleep(delay);
 
+    client.unbindEvents();
     client._sock = await makeNewSocket({ auth: client._auth, store: client._store, logger: client._logger });
     client.bindEvents();
     client._logger.info("(handleConnectionUpdate) Socket reinicializado após logout");
