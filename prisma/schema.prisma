@@ -117,10 +117,10 @@ model InpulseMessage {
 
   message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  @@unique([messageId], name: "uq_parsed_messages_message_id")
-  @@index([sessionId], name: "idx_parsed_messages_session_id")
-  @@index([from], name: "idx_parsed_messages_from")
-  @@map("parsed_messages")
+  @@unique([messageId], name: "uq_inpulse_messages_message_id")
+  @@index([sessionId], name: "idx_inpulse_messages_session_id")
+  @@index([from], name: "idx_inpulse_messages_from")
+  @@map("inpulse_messages")
 }
 
 model MessageProcessingStatus {
