@@ -19,25 +19,25 @@ process.on('uncaughtException', (error) => {
 
 async function runApp() {
   const endpoints = process.env["WPP_EVENT_ENDPOINTS"]?.split(",");
-  const instance = process.env["INSTANCE_NAME"];
+  const instance = process.env["CLIENT_INSTANCE"];
   const clientId = process.env["CLIENT_ID"] ? parseInt(process.env["CLIENT_ID"], 10) : null;
   const sessionId =
-    process.env["SESSION_ID"] || (instance && clientId !== null ? `${instance}-${clientId}` : null);
-  const listenPort = parseInt(process.env["API_LISTEN_PORT"] || "727", 10);
+    process.env["CLIENT_SESSION_ID"] || (instance && clientId !== null ? `${instance}-${clientId}` : null);
+  const listenPort = parseInt(process.env["API_PORT"] || "727", 10);
 
   console.log("Starting application with the following configuration:");
   console.log(`WPP_EVENT_ENDPOINTS: ${endpoints}`);
-  console.log(`INSTANCE_NAME: ${instance}`);
   console.log(`CLIENT_ID: ${clientId}`);
-  console.log(`SESSION_ID: ${sessionId}`);
-  console.log(`API_LISTEN_PORT: ${listenPort}`);
+  console.log(`CLIENT_INSTANCE: ${instance}`);
+  console.log(`CLIENT_SESSION_ID: ${sessionId}`);
+  console.log(`API_PORT: ${listenPort}`);
 
   if (!endpoints || endpoints.length === 0) {
     throw new Error("WPP_EVENT_ENDPOINTS environment variable is not set or empty");
   }
 
   if (!instance) {
-    throw new Error("INSTANCE_NAME environment variable is not set");
+    throw new Error("CLIENT_INSTANCE environment variable is not set");
   }
 
   if (clientId === null || isNaN(clientId)) {
@@ -45,11 +45,11 @@ async function runApp() {
   }
 
   if (!sessionId) {
-    throw new Error("SESSION_ID environment variable is not set and cannot be derived");
+    throw new Error("CLIENT_SESSION_ID environment variable is not set and cannot be derived");
   }
 
   const eventEmitter = new HttpWppEventEmitter(endpoints);
-  const store = new PrismaBaileysStore(instance, sessionId, clientId,);
+  const store = new PrismaBaileysStore(instance, sessionId);
   const logger = new PrismaLogger("info", { sessionId, instance });
   const auth = await PrismaBaileysAuth.fromSession(sessionId);
   const wppClient = await BaileysWhatsappClient.build({
