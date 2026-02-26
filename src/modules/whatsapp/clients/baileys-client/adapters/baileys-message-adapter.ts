@@ -1,12 +1,12 @@
-import { BufferJSON, isJidGroup, proto, WAMessage, WAMessageKey } from "baileys";
+import { isJidGroup, proto, WAMessage, WAMessageKey } from "baileys";
 import onlyDigits from "../../../../../helpers/only-digits";
 import InpulseMessage, { InpulseMessageStatus } from "../../../inpulse-types";
-import { RawMessage } from "../../../types";
+import { extractLidFromKey } from "../helpers/extract-lid-from-key";
 import { extractMessageData, FileMessageContent } from "../helpers/extract-message-data";
 import { extractPhoneFromKey } from "../helpers/extract-phone-from-key";
 import saveMessageMedia from "../helpers/save-message-media";
 import BaileysStore from "../store/baileys-store";
-import { extractLidFromKey } from "../helpers/extract-lid-from-key";
+import { RawMessage } from "../types";
 
 type BaileysMessage = WAMessage | {
   key: proto.IMessageKey;
@@ -14,38 +14,54 @@ type BaileysMessage = WAMessage | {
   messageTimestamp: string;
 }
 
-// Adicionar handler para arquivos de mensagens antigas (toInpulseMessage)
-// Adicionar hanlder para status de mensagens antigas (getMessageStatus)
+interface ToInpulseMessageOptions {
+  instance: string;
+  clientId: number;
+  store: BaileysStore;
+  clientPhone: string;
+}
+
+interface ToRawMessageOptions {
+  instance: string;
+  sessionId: string;
+}
+
+interface GetMessageContactNameOptions {
+  key: WAMessageKey;
+  store: BaileysStore;
+}
+
 class BaileysMessageAdapter {
-  public constructor(
-    private readonly _instance: string,
-    private readonly _clientId: number,
-    private readonly _sessionId: string,
-    private readonly _phone: string,
-    private readonly _message: BaileysMessage,
-    private readonly _store: BaileysStore
-  ) { }
+  private readonly _message: BaileysMessage;
+
+  public constructor(message: BaileysMessage) {
+    this._message = message;
+  }
 
   public get original(): BaileysMessage {
     return this._message;
   }
 
-  public toRawMessage(): RawMessage {
+  public toRawMessage({ sessionId, instance }: ToRawMessageOptions): RawMessage {
+    if (!this._message.message) {
+      throw new Error("Message does not have message content");
+    }
+
     return {
       id: this.getMessageId(),
-      instance: this._instance,
-      sessionId: this._sessionId,
+      instance,
+      sessionId,
       remoteJid: this.getChatId(),
       timestamp: String(this._message.messageTimestamp),
       keyData: this._message.key,
-      messageData: JSON.parse(JSON.stringify(this._message.message, BufferJSON.replacer)) || {},
+      messageData: this._message.message,
     }
   }
 
-  public async toInpulseMessage(): Promise<InpulseMessage> {
-    const remotePhone = await this.getRemotePhone();
-    const remoteLid = await this.getRemoteLid();
-    const fromMe = remotePhone === this._phone;
+  public async toInpulseMessage({ clientPhone, clientId, store, instance }: ToInpulseMessageOptions): Promise<InpulseMessage> {
+    const remotePhone = await this.getRemotePhone(store);
+    const remoteLid = await this.getRemoteLid(store);
+    const fromMe = remotePhone === clientPhone;
     const chatId = this.getChatId();
     const { isFile, ...content } = extractMessageData(this._message.message!);
     const sentAt = this.getMessageDate();
@@ -55,18 +71,19 @@ class BaileysMessageAdapter {
     }
 
     const remote = remoteLid || remotePhone!;
+    const key = this._message.key;
 
     const message: InpulseMessage = {
-      instance: this._instance,
-      clientId: this._clientId,
+      instance,
+      clientId,
       wwebjsIdStanza: this.getMessageId(),
-      from: fromMe ? `me:${this._phone}` : remote,
-      to: fromMe ? remote : `me:${this._phone}`,
+      from: fromMe ? `me:${clientPhone}` : remote,
+      to: fromMe ? remote : `me:${clientPhone}`,
       isForwarded: this.getIsForwarded(this._message.message || {}),
       isGroup: isJidGroup(chatId) || false,
       groupId: chatId.replace("@g.us", "") || null,
       status: this.getMessageStatus(fromMe),
-      authorName: await this.getMessageContactName(this._message.key),
+      authorName: await this.getMessageContactName({ key, store }),
       timestamp: String(sentAt.getTime()),
       sentAt: sentAt,
       ...content,
@@ -74,7 +91,7 @@ class BaileysMessageAdapter {
 
     if (isFile && "category" in this._message) {
       const { fileName, fileType } = content as FileMessageContent;
-      const file = await saveMessageMedia(this._message, fileName, fileType, this._instance);
+      const file = await saveMessageMedia(this._message, fileName, fileType, instance);
       message.fileId = file.id;
       message.fileSize = String(file.size);
     }
@@ -100,26 +117,26 @@ class BaileysMessageAdapter {
     throw new Error("Message does not have an id");
   }
 
-  private async getRemotePhone(): Promise<string | null> {
+  private async getRemotePhone(store: BaileysStore): Promise<string | null> {
     // Try to get the phone number from the message key
     const phoneFromKey = extractPhoneFromKey(this._message.key);
     if (phoneFromKey) {
       return phoneFromKey;
     }
     // If that fails, try to get it from the store
-    const contact = await this._store.getContactByKey(this._message.key);
+    const contact = await store.getContactByKey(this._message.key);
     if (contact?.phone) {
       return onlyDigits(contact.phone);
     }
     return null;
   }
 
-  private async getRemoteLid(): Promise<string | null> {
+  private async getRemoteLid(store: BaileysStore): Promise<string | null> {
     const lidFromKey = extractLidFromKey(this._message.key);
     if (lidFromKey) {
       return lidFromKey;
     }
-    const contact = await this._store.getContactByKey(this._message.key);
+    const contact = await store.getContactByKey(this._message.key);
     return contact?.id || null;
   }
 
@@ -146,8 +163,8 @@ class BaileysMessageAdapter {
     return fromMe ? "SENT" : "RECEIVED";
   }
 
-  private async getMessageContactName(key: WAMessageKey): Promise<string | null> {
-    const contact = await this._store.getContactByKey(key);
+  private async getMessageContactName({ key, store }: GetMessageContactNameOptions): Promise<string | null> {
+    const contact = await store.getContactByKey(key);
 
     if (contact?.name || contact?.verifiedName) {
       return contact.name || contact.verifiedName!;
@@ -168,7 +185,9 @@ class BaileysMessageAdapter {
     if (!timestamp) {
       throw new Error("Message does not have a timestamp");
     }
+
     const timestampMs = parseInt(timestamp.toString().padEnd(13, "0"));
+
     return new Date(timestampMs);
   }
 }
