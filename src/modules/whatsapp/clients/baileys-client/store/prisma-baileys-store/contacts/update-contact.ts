@@ -2,13 +2,13 @@ import { Contact } from "baileys";
 import ContactsRepository, { UpdateRawContactInput } from "./contacts-repository";
 import { ILogger } from "baileys/lib/Utils/logger";
 
-interface UpdateContactInput {
+interface UpdateContactDto {
   contact: Partial<Contact>;
   logger: ILogger;
   repository: ContactsRepository;
 }
 
-async function updateContact({ contact, logger, repository }: UpdateContactInput): Promise<void> {
+async function updateContact({ contact, logger, repository }: UpdateContactDto): Promise<void> {
   try {
     logger.info({ contact }, "Updating contact");
     if (!contact?.id) {

@@ -1,11 +1,13 @@
-import { Contact, isLidUser, isPnUser } from "baileys";
+import { Contact, GroupMetadata, isLidUser, isPnUser } from "baileys";
 import { ILogger } from "baileys/lib/Utils/logger";
 import ContactsRepository from "./contacts-repository";
+import GroupsRepository from "../groups/groups-repository";
 
-interface UpsertContactInput {
+interface UpsertContactDto {
   contact: Contact;
   logger: ILogger;
-  repository: ContactsRepository;
+  contactsRepo: ContactsRepository;
+  groupsRepo: GroupsRepository;
 }
 
 const getContactPhone = (contact: Contact): string | null => {
@@ -30,21 +32,29 @@ const getContactLid = (contact: Contact): string | null => {
   return null;
 }
 
-async function upsertContact({ contact, logger, repository }: UpsertContactInput): Promise<void> {
+async function upsertContact({ contact, logger, contactsRepo, groupsRepo }: UpsertContactDto): Promise<void> {
   try {
-    logger.info({ contact }, "Upserting contact");
+    if (contact.id.endsWith("@g.us")) {
+      const groupData: Partial<GroupMetadata> = {
+        id: contact.id,
+        ...(contact.name ? { subject: contact.name } : {}),
+      }
+      await groupsRepo.upsert(contact.id, groupData, contact.name);
+      logger.info(`Contact with ID ${contact.id} is a group, saved on groups repository`);
+    } else {
+      await contactsRepo.upsert({
+        id: contact.id,
+        lid: contact.lid || getContactLid(contact),
+        phoneNumber: contact.phoneNumber || getContactPhone(contact),
+        name: contact.name || null,
+        notify: contact.notify || null,
+        verifiedName: contact.verifiedName || null,
+        imgUrl: contact.imgUrl || null,
+        status: contact.status || null,
+      });
+      logger.info(`Contact with ID ${contact.id} upserted successfully`);
+    }
 
-    await repository.upsert({
-      id: contact.id,
-      lid: contact.lid || getContactLid(contact),
-      phoneNumber: contact.phoneNumber || getContactPhone(contact),
-      name: contact.name || null,
-      notify: contact.notify || null,
-      verifiedName: contact.verifiedName || null,
-      imgUrl: contact.imgUrl || null,
-      status: contact.status || null,
-    });
-    logger.info(`Contact with ID ${contact.id} upserted successfully`);
   } catch (err) {
     logger.error(err, `Failed to upsert contact with ID ${contact.id}`);
   }

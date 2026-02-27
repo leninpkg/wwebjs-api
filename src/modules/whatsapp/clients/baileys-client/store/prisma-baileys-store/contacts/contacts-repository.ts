@@ -1,7 +1,7 @@
 import { Contact, isLidUser, isPnUser } from "baileys";
 import { prisma } from "../../../../../../../prisma";
 
-interface UpdateRawContactInput {
+interface UpdateRawContactDto {
   lid?: string | null;
   phoneNumber?: string | null;
   name?: string | null;
@@ -11,7 +11,7 @@ interface UpdateRawContactInput {
   status?: string | null;
 }
 
-interface UpsertRawContactInput {
+interface UpsertRawContactDto {
   id: string;
   lid: string | null;
   phoneNumber: string | null;
@@ -60,14 +60,14 @@ class ContactsRepository {
     });
   }
 
-  public async updateById(id: string, data: UpdateRawContactInput): Promise<void> {
+  public async updateById(id: string, data: UpdateRawContactDto): Promise<void> {
     await prisma.rawContact.update({
       where: { id },
       data,
     });
   }
 
-  public async upsert(input: UpsertRawContactInput): Promise<void> {
+  public async upsert(input: UpsertRawContactDto): Promise<void> {
     await prisma.rawContact.upsert({
       where: {
         id: input.id,
@@ -104,14 +104,15 @@ class ContactsRepository {
     return contacts.map(contact => this.mapToRawContact(contact));
   }
 
-  public async findByPossibleIds(possibleIds: string[]) {
+  public async findByLid(lid: string) {
     return prisma.rawContact.findFirst({
       where: {
         sessionId: this.sessionId,
         instance: this.instance,
-        id: {
-          in: possibleIds,
-        },
+        OR: [
+          { lid },
+          { id: lid + "@lid" },
+        ]
       },
     });
   }
@@ -121,7 +122,10 @@ class ContactsRepository {
       where: {
         sessionId: this.sessionId,
         instance: this.instance,
-        phoneNumber,
+        OR: [
+          { phoneNumber },
+          { id: phoneNumber + "@s.whatsapp.net" },
+        ]
       },
     });
   }
@@ -148,5 +152,5 @@ class ContactsRepository {
   }
 }
 
-export type { UpdateRawContactInput };
+export type { UpdateRawContactDto as UpdateRawContactInput };
 export default ContactsRepository;
