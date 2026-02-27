@@ -84,6 +84,7 @@ model RawContact {
   id           String   @id
   sessionId    String   @map("session_id")
   instance     String
+  lid          String?  @db.VarChar(255)
   phoneNumber  String?  @map("phone_number") @db.VarChar(50)
   name         String?  @db.VarChar(255)
   notify       String?  @db.VarChar(255)
@@ -138,16 +139,16 @@ model MessageProcessingStatus {
 }
 
 model Log {
-  id          String   @id @default(uuid())
-  level       LogLevel
-  emittedBy   String?  @map("emitted_by")
+  id            String   @id @default(uuid())
+  level         LogLevel
+  emittedBy     String?  @map("emitted_by")
   operationName String?  @map("operation_name")
   correlationId String?  @map("correlation_id")
-  message     String   @db.Text
-  metadata    Json?
-  sessionId   String?  @map("session_id")
-  instance    String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  message       String   @db.Text
+  metadata      Json?
+  sessionId     String?  @map("session_id")
+  instance      String?
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([level], name: "idx_logs_level")
   @@index([correlationId], name: "idx_logs_correlation_id")
