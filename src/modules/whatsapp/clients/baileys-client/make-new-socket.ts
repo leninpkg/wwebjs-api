@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import makeWASocket, { Browsers, isJidBroadcast, isJidMetaAI, isJidNewsletter, isJidStatusBroadcast, makeCacheableSignalKeyStore } from "baileys";
+import makeWASocket, { Browsers, fetchLatestBaileysVersion, isJidBroadcast, isJidMetaAI, isJidNewsletter, isJidStatusBroadcast, makeCacheableSignalKeyStore } from "baileys";
 import DataClient from "../../../data/data-client";
 import logger from "./logger";
 
@@ -10,6 +10,8 @@ async function makeNewSocket(id: string, storage: DataClient) {
   const syncFullHistory = process.env["BAILEYS_SYNC_FULL_HISTORY"] !== "false";
 
   console.log(`Criando nova instância de socket para o cliente ${id}... syncFullHistory=${syncFullHistory}`);
+
+  const { version } = await fetchLatestBaileysVersion();
 
   const socket = makeWASocket({
     logger,
@@ -32,8 +34,8 @@ async function makeNewSocket(id: string, storage: DataClient) {
       }
     },
     syncFullHistory,
-    version: [2, 3000, 1033105955],
     enableAutoSessionRecreation: true,
+    version
   });
 
   return socket;
