@@ -1,4 +1,4 @@
-import { Logger } from "@in.pulse-crm/utils";
+import chalk from 'chalk';
 import { ILogger } from "baileys/lib/Utils/logger";
 
 enum LogLevel {
@@ -8,6 +8,25 @@ enum LogLevel {
   warn = 3,
   error = 4,
   fatal = 5,
+}
+
+function getLevelText(level: LogLevel): string {
+  switch (level) {
+    case LogLevel.trace:
+      return chalk.gray("[TRACE]".padEnd(7, " "));
+    case LogLevel.debug:
+      return chalk.magenta("[DEBUG]".padEnd(7, " "));
+    case LogLevel.info:
+      return chalk.blue("[INFO]".padEnd(7, " "));
+    case LogLevel.warn:
+      return chalk.yellow("[WARN]".padEnd(7));
+    case LogLevel.error:
+      return chalk.red("[ERROR]".padEnd(7, " "));
+    case LogLevel.fatal:
+      return chalk.bgRed.redBright("[FATAL]".padEnd(7, " "));
+    default:
+      return "[UNKN]".padEnd(7, " ");
+  }
 }
 
 export class ConsoleLogger implements ILogger {
@@ -21,56 +40,51 @@ export class ConsoleLogger implements ILogger {
     this.defaultEmitter = defaultEmitter;
   }
 
+  private static log(level: LogLevel, emitter: string, processName: string, obj: unknown | string, msg?: string) {
+    const lvl = getLevelText(level);
+    const em = chalk.cyan(emitter);
+    const pn = chalk.cyanBright(processName || "unknown");
+    const ctx = `${em}:${pn}`
+    const WIDTH = 50;
+    const centeredCtx = ctx.padStart((WIDTH + ctx.length) / 2, " ").padEnd(WIDTH, " ");
+
+    const date = chalk.green(new Date().toISOString().padEnd(24, " "));
+
+    const prefix = `${date}${lvl}${centeredCtx}| `;
+    const message = ConsoleLogger.formatMsg(obj, msg);
+    const hasObject = typeof obj !== "string";
+
+    console.log(`${prefix}${message}`);
+    if (hasObject) {
+      console.dir(obj, { depth: null, colors: true });
+    }
+  }
+
+  private static formatMsg(obj: unknown, msg?: string): string {
+    if (typeof msg === "string") return msg;
+    if (typeof obj === "string") return obj + (msg ? ` | ${msg}` : "");
+    const objClassName = obj?.constructor?.name || "Object";
+    return `{${objClassName}} - ` + (msg ? `${msg}` : "");
+  }
+
   private shouldLog(messageLevel: LogLevel): boolean {
     return messageLevel >= this.levelValue;
   }
 
-  public static formatMessage(msg: string, emitter: string, processName?: string, isTrace: boolean = false): string {
-    const processPart = processName ? `|${processName}| ` : "";
-    return `${isTrace ? "[TRACE] " : ""}(${emitter}) ${processPart}${msg}`;
-  }
-
   public error(obj: unknown, msg?: string, emitter: string = this.defaultEmitter, processName: string = "unknown"): void {
     if (!this.shouldLog(LogLevel.error)) return;
-    let message: string;
-    let error: any = null;
 
-    if (typeof obj === "string") {
-      message = obj + (msg ? ` | ${msg}` : "");
-    } else if (obj instanceof Error) {
-      message = msg || obj.message;
-      error = obj;
-    } else {
-      const objClassName = obj?.constructor?.name || "Object";
-      message = `Error ocurred: ${msg || ""} | ObjType: ${objClassName}`;
-      error = obj;
-    }
-
-    Logger.error(ConsoleLogger.formatMessage(message, emitter, processName), error);
+    ConsoleLogger.log(LogLevel.error, emitter, processName, obj, msg);
   }
 
   public warn(obj: unknown, msg?: string, emitter: string = this.defaultEmitter, processName: string = "unknown"): void {
     if (!this.shouldLog(LogLevel.warn)) return;
-
-    if (typeof obj === "string") {
-      Logger.warning(ConsoleLogger.formatMessage(obj + (msg ? ` | ${msg}` : ""), emitter, processName));
-    } else {
-      const objClassName = obj?.constructor?.name || "Object";
-      Logger.warning(ConsoleLogger.formatMessage(`Error ocurred: ${msg || ""} | ObjType: ${objClassName}`, emitter, processName));
-      console.log(obj);
-    }
+    ConsoleLogger.log(LogLevel.warn, emitter, processName, obj, msg);
   }
 
   public info(obj: unknown, msg?: string, emitter: string = this.defaultEmitter, processName: string = "unknown"): void {
     if (!this.shouldLog(LogLevel.info)) return;
-
-    if (typeof obj === "string") {
-      Logger.info(ConsoleLogger.formatMessage(obj + (msg ? ` | ${msg}` : ""), emitter, processName));
-    } else {
-      const objClassName = obj?.constructor?.name || "Object";
-      Logger.info(ConsoleLogger.formatMessage(`Error ocurred: ${msg || ""} | ObjType: ${objClassName}`, emitter, processName));
-      console.log(obj);
-    }
+    ConsoleLogger.log(LogLevel.info, emitter, processName, obj, msg);
   }
 
   public child(): ILogger {
@@ -79,23 +93,11 @@ export class ConsoleLogger implements ILogger {
 
   public debug(obj: unknown, msg?: string, emitter: string = this.defaultEmitter, processName: string = "unknown"): void {
     if (!this.shouldLog(LogLevel.debug)) return;
-
-    if (typeof obj === "string") {
-      Logger.debug(ConsoleLogger.formatMessage(obj + (msg ? ` | ${msg}` : ""), emitter, processName));
-    } else {
-      const objClassName = obj?.constructor?.name || "Object";
-      Logger.debug(ConsoleLogger.formatMessage(`Error ocurred: ${msg || ""} | ObjType: ${objClassName}`, emitter, processName));
-      console.log(obj);
-    }
+    ConsoleLogger.log(LogLevel.debug, emitter, processName, obj, msg);
   }
 
   public trace(obj: unknown, msg?: string, emitter: string = this.defaultEmitter, processName: string = "unknown"): void {
     if (!this.shouldLog(LogLevel.trace)) return;
-
-    if (typeof obj === "string") {
-      Logger.debug(ConsoleLogger.formatMessage(obj + (msg ? ` | ${msg}` : ""), emitter, processName, true));
-    } else {
-      Logger.debug(ConsoleLogger.formatMessage(`${msg || ""}`, emitter, processName, true), obj);
-    }
+    ConsoleLogger.log(LogLevel.trace, emitter, processName, obj, msg);
   }
 }
