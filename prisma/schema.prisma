@@ -30,20 +30,18 @@ model BaileysAuth {
   @@map("baileys_auth")
 }
 
-model RawGroupMetadata {
-  id        String @id
-  remoteJid String @map("remote_jid")
+model RawGroup {
   sessionId String @map("session_id")
-
   instance  String
-  metadata  Json     @map("metadata")
+
+  id   String  @id
+  name String? @db.VarChar(255)
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@index([remoteJid], name: "idx_group_metadata_remote_jid")
-  @@index([sessionId], name: "idx_group_metadata_session_id")
-  @@index([instance], name: "idx_group_metadata_instance")
-  @@map("group_metadata")
+  @@index([instance], name: "idx_raw_groups_instance")
+  @@map("raw_groups")
 }
 
 model RawMessage {
@@ -61,22 +59,21 @@ model RawMessage {
   messageSyncStatus MessageProcessingStatus?
   file              RawMessageFile?
 
+  @@index([instance], name: "idx_raw_messages_instance")
+  @@index([remoteJid], name: "idx_raw_messages_remote_jid")
   @@map("raw_messages")
 }
 
 model RawMessageFile {
-  id        String   @id
+  id        String   @id @default(nanoid())
   messageId String   @unique @map("message_id")
   inpulseId Int?     @unique @map("inpulse_id")
-  fileName  String   @map("file_name") @db.Text
-  fileType  String   @map("file_type")
-  fileSize  Int?     @map("file_size")
-  filePath  String   @map("file_path") @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
+  @@index([messageId], name: "idx_raw_message_files_message_id")
   @@map("raw_message_files")
 }
 
@@ -94,6 +91,9 @@ model RawContact {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  @@index([instance], name: "idx_raw_contacts_instance")
+  @@index([phoneNumber], name: "idx_raw_contacts_phone_number")
+  @@index([lid], name: "idx_raw_contacts_lid")
   @@map("raw_contacts")
 }
 
@@ -119,8 +119,9 @@ model InpulseMessage {
   message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([messageId], name: "uq_inpulse_messages_message_id")
-  @@index([sessionId], name: "idx_inpulse_messages_session_id")
+  @@index([instance], name: "idx_inpulse_messages_instance")
   @@index([from], name: "idx_inpulse_messages_from")
+  @@index([to], name: "idx_inpulse_messages_to")
   @@map("inpulse_messages")
 }
 

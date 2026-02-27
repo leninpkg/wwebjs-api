@@ -2,12 +2,17 @@ import { BufferJSON, proto } from "baileys";
 import { prisma } from "../../../../../../../prisma";
 import resolveJson from "../resolve-json";
 
-interface UpsertRawMessageInput {
+interface UpsertMessageDto {
   id: string;
   timestamp: string;
   remoteJid: string;
   keyData: proto.IMessageKey;
   messageData: proto.IMessage;
+}
+
+interface UpsertMessageMediaDto {
+  messageId: string;
+  inpulseId: number;
 }
 
 class MessagesRepository {
@@ -16,17 +21,17 @@ class MessagesRepository {
     private readonly instance: string,
   ) { }
 
-  public async upsert(input: UpsertRawMessageInput): Promise<void> {
-    const keyData = JSON.stringify(input.keyData, BufferJSON.replacer);
-    const messageData = JSON.stringify(input.messageData, BufferJSON.replacer);
+  public async upsert(message: UpsertMessageDto): Promise<void> {
+    const keyData = JSON.stringify(message.keyData, BufferJSON.replacer);
+    const messageData = JSON.stringify(message.messageData, BufferJSON.replacer);
 
     await prisma.rawMessage.upsert({
-      where: { id: input.id },
+      where: { id: message.id },
       create: {
-        id: input.id,
+        id: message.id,
         instance: this.instance,
-        timestamp: input.timestamp,
-        remoteJid: input.remoteJid,
+        timestamp: message.timestamp,
+        remoteJid: message.remoteJid,
         sessionId: this.sessionId,
         keyData,
         messageData,
@@ -96,6 +101,21 @@ class MessagesRepository {
       const keyData = resolveJson<proto.IMessageKey>(message.keyData);
       const messageData = resolveJson<proto.IMessage>(message.messageData);
       return { ...message, keyData, messageData };
+    });
+  }
+
+  public async insertMedia(media: UpsertMessageMediaDto) {
+    return await prisma.rawMessageFile.create({
+      data: {
+        messageId: media.messageId,
+        inpulseId: media.inpulseId,
+      },
+    });
+  }
+
+  public getMedia(messageId: string) {
+    return prisma.rawMessageFile.findUnique({
+      where: { messageId },
     });
   }
 }

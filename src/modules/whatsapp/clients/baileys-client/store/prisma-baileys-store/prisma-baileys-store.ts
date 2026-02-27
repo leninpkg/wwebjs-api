@@ -3,23 +3,21 @@ import onlyDigits from "../../../../../../helpers/only-digits";
 import { extractLidFromKey } from "../../helpers/extract-lid-from-key";
 import { extractPhoneFromKey } from "../../helpers/extract-phone-from-key";
 import { PrismaLogger } from "../../logger/prisma-logger";
-import { MessageFile, MessageUpdateEvent, MessageUpsertEvent, RawContact, RawGroupMetadata, RawMessage } from "../../types";
-import BaileysStore, { GetMessagesByChatOptions } from "../baileys-store";
+import { MessageUpdateEvent, MessageUpsertEvent, RawContact, RawGroupMetadata, RawMessage } from "../../types";
+import BaileysStore, { GetMessageMediaResult, GetMessagesByChatOptions } from "../baileys-store";
 import ContactsRepository from "./contacts/contacts-repository";
 import updateContact from "./contacts/update-contact";
 import upsertContact from "./contacts/upsert-contact";
+import getMessageMedia from "./messages/get-message-media";
 import MessagesRepository from "./messages/messages-repository";
-import RawGroupMetadataRepository from "./repositories/raw-group-metadata-repository";
-import RawMessageFileRepository from "./repositories/raw-message-file-repository";
-import MediaService from "./services/media-service";
-import upsertMessage from "./messages/upsert-message";
 import updateMessage from "./messages/update-message";
+import upsertMessage from "./messages/upsert-message";
+import RawGroupMetadataRepository from "./repositories/raw-group-metadata-repository";
 
 class PrismaBaileysStore implements BaileysStore {
   private readonly messagesRepository: MessagesRepository;
   private readonly contactsRepository: ContactsRepository;
   private readonly rawGroupMetadataRepository: RawGroupMetadataRepository;
-  private readonly mediaService: MediaService;
   private readonly emitterName = "WppStore";
 
   constructor(
@@ -30,11 +28,6 @@ class PrismaBaileysStore implements BaileysStore {
     this.messagesRepository = new MessagesRepository(this.sessionId, this.instance);
     this.contactsRepository = new ContactsRepository(this.sessionId, this.instance);
     this.rawGroupMetadataRepository = new RawGroupMetadataRepository(this.sessionId, this.instance);
-    this.mediaService = new MediaService(
-      this.instance,
-      this.sessionId,
-      new RawMessageFileRepository(),
-    );
   }
 
   private getLogger(operationName: string) {
@@ -49,14 +42,11 @@ class PrismaBaileysStore implements BaileysStore {
     ev.on("contacts.update", this.handleContactsUpdate.bind(this));
     ev.on("messages.upsert", this.handleMessagesUpsert.bind(this));
     ev.on("messages.update", this.handleMessagesUpdate.bind(this));
-    //ev.on("chats.upsert", this.handleChatsUpsert.bind(this));
-    //ev.on("chats.update", this.handleChatsUpdate.bind(this));
-    //ev.on("groups.update", this.handleGroupsUpdate.bind(this));
+    //ev.on("groups.update", this.handleGroupsUpdate.bind(this)); 
     //ev.on("groups.upsert", this.handleGroupsUpsert.bind(this));
   }
 
-  private async handleMessagesUpsert({ messages }: MessageUpsertEvent) {
-    const logger = this.getLogger("hMsgUpsert");
+  private async handleMessagesUpsert({ messages }: MessageUpsertEvent, logger = this.getLogger("hMsgUpsert")) {
     for (const message of messages) {
       await upsertMessage({ logger, message, repository: this.messagesRepository });
     }
@@ -69,49 +59,26 @@ class PrismaBaileysStore implements BaileysStore {
     }
   }
 
-  private async handleHistorySet(data: BaileysEventMap["messaging-history.set"]) {
-    console.log(`[Store] History set received: ${data.messages.length} messages, ${data.chats?.length || 0} chats, ${data.contacts?.length || 0} contacts`);
-
-    /* for (const message of data.messages) {
-      if (shouldIgnoreMessage(message)) continue;
-
-      await this.rawMessageRepository.upsert({
-        id: message.key.id!,
-        timestamp: String(message.messageTimestamp),
-        remoteJid: message.key.remoteJid!,
-        keyData: message.key,
-        messageData: message.message || {},
-      });
-    } */
-    await this.handleContactsUpsert(data.contacts);
-    //await this.handleChatsUpsert(data.chats);
-
-    console.log(`[Store] History set processed successfully`);
+  private async handleHistorySet(data: BaileysEventMap["messaging-history.set"], logger = this.getLogger("hHistorySet")) {
+    logger.info(`Processing history set: ${data.messages.length} messages, ${data.contacts.length} contacts, ${data.chats.length} chats`);
+    await this.handleMessagesUpsert({ messages: data.messages, type: "notify" }, logger);
+    await this.handleContactsUpsert(data.contacts, logger);
+    logger.info(`Finished processing history set`);
   }
 
-  private async handleContactsUpdate(contacts: Partial<Contact>[]) {
-    const logger = this.getLogger("hCttUpdate");
+  private async handleContactsUpdate(contacts: Partial<Contact>[], logger = this.getLogger("hCttUpdate")) {
     for (const contact of contacts) {
       await updateContact({ logger, contact, repository: this.contactsRepository });
     }
   }
 
-  private async handleContactsUpsert(contacts: Contact[]) {
-    const logger = this.getLogger("hCttUpsert");
+  private async handleContactsUpsert(contacts: Contact[], logger = this.getLogger("hCttUpsert")) {
     for (const contact of contacts) {
       await upsertContact({ logger, contact, repository: this.contactsRepository });
     }
   }
 
-  private async handleChatsUpsert(chats: Chat[]) {
-    console.log(`[Store] Chats upsert: ${chats.length} chats`);
-  }
-
-  private async handleChatsUpdate(updates: Partial<Chat>[]) {
-    console.log(`[Store] Chats update: ${updates.length} chats`);
-  }
-
-  private async handleGroupsUpdate(groups: Partial<GroupMetadata>[]) {
+  private async handleGroupsUpdate(groups: Partial<GroupMetadata>[], logger = this.getLogger("hGroupsUpdate")) {
     console.log(`[Store] Groups update: ${groups.length} groups`);
 
     for (const group of groups) {
@@ -126,7 +93,7 @@ class PrismaBaileysStore implements BaileysStore {
     }
   }
 
-  private async handleGroupsUpsert(groups: GroupMetadata[]) {
+  private async handleGroupsUpsert(groups: GroupMetadata[], logger = this.getLogger("hGroupsUpsert")) {
     console.log(`[Store] Groups upsert: ${groups.length} groups`);
 
     for (const group of groups) {
@@ -228,8 +195,8 @@ class PrismaBaileysStore implements BaileysStore {
     return null;
   }
 
-  public async getMessageMedia(message: WAMessage): Promise<MessageFile> {
-    return await this.mediaService.getMessageMedia(message);
+  public async getMessageMedia(message: WAMessage, logger = this.getLogger("getMessageMedia")): Promise<GetMessageMediaResult> {
+    return await getMessageMedia({ message, logger, repository: this.messagesRepository, instance: this.instance });
   }
 }
 
