@@ -44,13 +44,11 @@ export class ConsoleLogger implements ILogger {
     const lvl = getLevelText(level);
     const em = chalk.cyan(emitter);
     const pn = chalk.cyanBright(processName || "unknown");
-    const ctx = `${em}:${pn}`
-    const WIDTH = 50;
-    const centeredCtx = ctx.padStart((WIDTH + ctx.length) / 2, " ").padEnd(WIDTH, " ");
+    const ctx = `${em}:${pn}`.padEnd(42, " ");
 
     const date = chalk.green(new Date().toISOString().padEnd(24, " "));
 
-    const prefix = `${date}${lvl}${centeredCtx}| `;
+    const prefix = `${date} ${lvl} ${ctx}| `;
     const message = ConsoleLogger.formatMsg(obj, msg);
     const hasObject = typeof obj !== "string";
 
