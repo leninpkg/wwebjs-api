@@ -41,7 +41,7 @@ async function updateContact({ contact, logger, repository }: UpdateContactInput
     await repository.updateById(existing.id, data);
     logger.info(`Contact with ID ${contact.id} updated successfully`);
   } catch (err: any) {
-    logger.error(err, `Failed to update contact: ${err.message}`);
+    logger.error(err, `Failed to update contact with ID ${contact.id}`);
   }
 }
 

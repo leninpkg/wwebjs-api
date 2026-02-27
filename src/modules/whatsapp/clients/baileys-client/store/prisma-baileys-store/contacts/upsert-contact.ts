@@ -45,8 +45,8 @@ async function upsertContact({ contact, logger, repository }: UpsertContactInput
       status: contact.status || null,
     });
     logger.info(`Contact with ID ${contact.id} upserted successfully`);
-  } catch (error) {
-    logger.error({ error }, "Failed to upsert contact");
+  } catch (err) {
+    logger.error(err, `Failed to upsert contact with ID ${contact.id}`);
   }
 }
 
