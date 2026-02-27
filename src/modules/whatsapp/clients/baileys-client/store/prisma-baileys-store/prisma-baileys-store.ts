@@ -3,26 +3,31 @@ import onlyDigits from "../../../../../../helpers/only-digits";
 import { extractLidFromKey } from "../../helpers/extract-lid-from-key";
 import { extractPhoneFromKey } from "../../helpers/extract-phone-from-key";
 import shouldIgnoreMessage from "../../helpers/should-ignore-message";
+import { PrismaLogger } from "../../logger/prisma-logger";
 import { MessageFile, MessageUpdateEvent, MessageUpsertEvent, RawContact, RawGroupMetadata, RawMessage } from "../../types";
 import BaileysStore, { GetMessagesByChatOptions } from "../baileys-store";
-import RawContactRepository, { UpdateRawContactInput } from "./repositories/raw-contact-repository";
+import ContactsRepository from "./contacts/contacts-repository";
+import updateContact from "./contacts/update-contact";
 import RawGroupMetadataRepository from "./repositories/raw-group-metadata-repository";
 import RawMessageFileRepository from "./repositories/raw-message-file-repository";
 import RawMessageRepository from "./repositories/raw-message-repository";
 import MediaService from "./services/media-service";
+import upsertContact from "./contacts/upsert-contact";
 
 class PrismaBaileysStore implements BaileysStore {
   private readonly rawMessageRepository: RawMessageRepository;
-  private readonly rawContactRepository: RawContactRepository;
+  private readonly contactsRepository: ContactsRepository;
   private readonly rawGroupMetadataRepository: RawGroupMetadataRepository;
   private readonly mediaService: MediaService;
+  private readonly emitterName = "WppStore";
 
   constructor(
     private readonly instance: string,
     private readonly sessionId: string,
+    private readonly logger: PrismaLogger
   ) {
     this.rawMessageRepository = new RawMessageRepository(this.sessionId, this.instance);
-    this.rawContactRepository = new RawContactRepository(this.sessionId, this.instance);
+    this.contactsRepository = new ContactsRepository(this.sessionId, this.instance);
     this.rawGroupMetadataRepository = new RawGroupMetadataRepository(this.sessionId, this.instance);
     this.mediaService = new MediaService(
       this.instance,
@@ -31,16 +36,22 @@ class PrismaBaileysStore implements BaileysStore {
     );
   }
 
+  private getLogger(operationName: string) {
+    const now = Date.now();
+    const id = `${this.sessionId}:${operationName}:${now}`;
+    return this.logger.getCorrelatedLogger(this.emitterName, operationName, id);
+  }
+
   public bind(ev: BaileysEventEmitter): void {
-    ev.on("messages.upsert", this.handleMessagesUpsert.bind(this));
-    ev.on("messages.update", this.handleMessagesUpdate.bind(this));
     ev.on("messaging-history.set", this.handleHistorySet.bind(this));
-    ev.on("contacts.update", this.handleContactsUpdate.bind(this));
     ev.on("contacts.upsert", this.handleContactsUpsert.bind(this));
-    ev.on("chats.upsert", this.handleChatsUpsert.bind(this));
-    ev.on("chats.update", this.handleChatsUpdate.bind(this));
-    ev.on("groups.update", this.handleGroupsUpdate.bind(this));
-    ev.on("groups.upsert", this.handleGroupsUpsert.bind(this));
+    //ev.on("messages.upsert", this.handleMessagesUpsert.bind(this));
+    //ev.on("messages.update", this.handleMessagesUpdate.bind(this));
+    //ev.on("contacts.update", this.handleContactsUpdate.bind(this));
+    //ev.on("chats.upsert", this.handleChatsUpsert.bind(this));
+    //ev.on("chats.update", this.handleChatsUpdate.bind(this));
+    //ev.on("groups.update", this.handleGroupsUpdate.bind(this));
+    //ev.on("groups.upsert", this.handleGroupsUpsert.bind(this));
   }
 
   private async handleMessagesUpsert({ messages }: MessageUpsertEvent) {
@@ -73,7 +84,7 @@ class PrismaBaileysStore implements BaileysStore {
   private async handleHistorySet(data: BaileysEventMap["messaging-history.set"]) {
     console.log(`[Store] History set received: ${data.messages.length} messages, ${data.chats?.length || 0} chats, ${data.contacts?.length || 0} contacts`);
 
-    for (const message of data.messages) {
+    /* for (const message of data.messages) {
       if (shouldIgnoreMessage(message)) continue;
 
       await this.rawMessageRepository.upsert({
@@ -83,69 +94,33 @@ class PrismaBaileysStore implements BaileysStore {
         keyData: message.key,
         messageData: message.message || {},
       });
-    }
-
-    if (data.contacts && data.contacts.length > 0) {
-      await this.handleContactsUpsert(data.contacts);
-    }
-
-    if (data.chats && data.chats.length > 0) {
-      await this.handleChatsUpsert(data.chats);
-    }
+    } */
+    await this.handleContactsUpsert(data.contacts);
+    //await this.handleChatsUpsert(data.chats);
 
     console.log(`[Store] History set processed successfully`);
   }
 
   private async handleContactsUpdate(contacts: Partial<Contact>[]) {
-    console.log(`[Store] Contacts update: ${contacts.length} contacts`);
-
+    const logger = this.getLogger("handleContactsUpdate");
     for (const contact of contacts) {
-      if (!contact.id) continue;
-
-      const existing = await this.rawContactRepository.findById(contact.id);
-
-      if (!existing) continue;
-
-      const data: UpdateRawContactInput = {};
-
-      if (typeof contact.name !== "undefined") data.name = contact.name;
-      if (typeof contact.notify !== "undefined") data.notify = contact.notify;
-      if (typeof contact.verifiedName !== "undefined") data.verifiedName = contact.verifiedName;
-      if (typeof contact.imgUrl !== "undefined") data.imgUrl = contact.imgUrl;
-      if (typeof contact.status !== "undefined") data.status = contact.status;
-      if (typeof contact.phoneNumber !== "undefined") data.phoneNumber = contact.phoneNumber;
-
-      if (Object.keys(data).length === 0) continue;
-
-      await this.rawContactRepository.updateById(existing.id, data);
+      await updateContact(logger, contact, this.contactsRepository);
     }
   }
 
   private async handleContactsUpsert(contacts: Contact[]) {
-    console.log(`[Store] Contacts upsert: ${contacts.length} contacts`);
-
+    const logger = this.getLogger("handleContactsUpsert");
     for (const contact of contacts) {
-
-      await this.rawContactRepository.upsert({
-        id: contact.id,
-        phoneNumber: contact.phoneNumber || null,
-        name: contact.name || null,
-        notify: contact.notify || null,
-        verifiedName: contact.verifiedName || null,
-        imgUrl: contact.imgUrl || null,
-        status: contact.status || null,
-      });
+      await upsertContact(logger, contact, this.contactsRepository);
     }
   }
 
   private async handleChatsUpsert(chats: Chat[]) {
     console.log(`[Store] Chats upsert: ${chats.length} chats`);
-    // TODO: Implementar quando houver tabela de chats
   }
 
   private async handleChatsUpdate(updates: Partial<Chat>[]) {
     console.log(`[Store] Chats update: ${updates.length} chats`);
-    // TODO: Implementar quando houver tabela de chats
   }
 
   private async handleGroupsUpdate(groups: Partial<GroupMetadata>[]) {
@@ -222,7 +197,7 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public async getContacts(): Promise<RawContact[]> {
-    return await this.rawContactRepository.findMany();
+    return await this.contactsRepository.findMany();
   }
 
   public async getChats(): Promise<Chat[]> {
@@ -232,20 +207,20 @@ class PrismaBaileysStore implements BaileysStore {
   public async getContactByLid(_jid: string): Promise<RawContact | null> {
     const possibleIds = _jid.includes("@") ? [_jid] : [_jid, `${_jid}@lid`];
 
-    const contact = await this.rawContactRepository.findByPossibleIds(possibleIds);
+    const contact = await this.contactsRepository.findByPossibleIds(possibleIds);
 
     if (!contact) {
       return null;
     }
 
-    return this.rawContactRepository.mapToRawContact(contact);
+    return this.contactsRepository.mapToRawContact(contact);
   }
 
   public async getContactByPhone(_phone: string): Promise<RawContact | null> {
     const normalizedPhone = onlyDigits(_phone);
-    const contact = await this.rawContactRepository.findByPhone(normalizedPhone);
+    const contact = await this.contactsRepository.findByPhone(normalizedPhone);
 
-    return contact ? this.rawContactRepository.mapToRawContact(contact) : null;
+    return contact ? this.contactsRepository.mapToRawContact(contact) : null;
   }
 
   public async getContactByKey(_key: WAMessageKey): Promise<RawContact | null> {
