@@ -104,14 +104,14 @@ class PrismaBaileysStore implements BaileysStore {
   private async handleContactsUpdate(contacts: Partial<Contact>[]) {
     const logger = this.getLogger("handleContactsUpdate");
     for (const contact of contacts) {
-      await updateContact(logger, contact, this.contactsRepository);
+      await updateContact({ logger, contact, repository: this.contactsRepository });
     }
   }
 
   private async handleContactsUpsert(contacts: Contact[]) {
     const logger = this.getLogger("handleContactsUpsert");
     for (const contact of contacts) {
-      await upsertContact(logger, contact, this.contactsRepository);
+      await upsertContact({ logger, contact, repository: this.contactsRepository });
     }
   }
 

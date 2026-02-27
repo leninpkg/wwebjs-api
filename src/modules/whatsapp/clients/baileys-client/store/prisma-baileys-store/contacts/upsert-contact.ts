@@ -2,6 +2,12 @@ import { Contact, isLidUser, isPnUser } from "baileys";
 import { ILogger } from "baileys/lib/Utils/logger";
 import ContactsRepository from "./contacts-repository";
 
+interface UpsertContactInput {
+  contact: Contact;
+  logger: ILogger;
+  repository: ContactsRepository;
+}
+
 const getContactPhone = (contact: Contact): string | null => {
   if (contact.phoneNumber) {
     return contact.phoneNumber.split("@")[0] || null;
@@ -24,7 +30,7 @@ const getContactLid = (contact: Contact): string | null => {
   return null;
 }
 
-async function upsertContact(logger: ILogger, contact: Contact, repository: ContactsRepository): Promise<void> {
+async function upsertContact({ contact, logger, repository }: UpsertContactInput): Promise<void> {
   try {
     logger.info({ contact }, "Upserting contact");
 
@@ -41,7 +47,6 @@ async function upsertContact(logger: ILogger, contact: Contact, repository: Cont
     logger.info(`Contact with ID ${contact.id} upserted successfully`);
   } catch (error) {
     logger.error({ error }, "Failed to upsert contact");
-    throw error;
   }
 }
 

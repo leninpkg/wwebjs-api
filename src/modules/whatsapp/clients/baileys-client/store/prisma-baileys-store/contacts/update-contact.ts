@@ -2,7 +2,13 @@ import { Contact } from "baileys";
 import ContactsRepository, { UpdateRawContactInput } from "./contacts-repository";
 import { ILogger } from "baileys/lib/Utils/logger";
 
-async function updateContact(logger: ILogger, contact: Partial<Contact>, repository: ContactsRepository): Promise<void> {
+interface UpdateContactInput {
+  contact: Partial<Contact>;
+  logger: ILogger;
+  repository: ContactsRepository;
+}
+
+async function updateContact({ contact, logger, repository }: UpdateContactInput): Promise<void> {
   try {
     logger.info({ contact }, "Updating contact");
     if (!contact?.id) {
@@ -36,7 +42,6 @@ async function updateContact(logger: ILogger, contact: Partial<Contact>, reposit
     logger.info(`Contact with ID ${contact.id} updated successfully`);
   } catch (err: any) {
     logger.error(err, `Failed to update contact: ${err.message}`);
-    throw err;
   }
 }
 
