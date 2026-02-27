@@ -34,13 +34,12 @@ export interface Message {
   updated_at: Date;
 }
 
-export interface MessageFile {
+export interface MessageMedia {
+  id: string;
   messageId: string;
   inpulseId: number | null;
-  fileName: string;
-  fileType: string;
-  fileSize: number | null;
-  filePath: string;
+  createdAt: Date;
+  updatedAt: Date | null;
 }
 
 // Backwards compatibility aliases
