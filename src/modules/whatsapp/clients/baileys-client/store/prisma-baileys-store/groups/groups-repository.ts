@@ -1,0 +1,67 @@
+import { BufferJSON, GroupMetadata } from "baileys";
+import { prisma } from "../../../../../../../prisma";
+import resolveJson from "../resolve-json";
+import { RawGroup } from "../../../types";
+
+class GroupsRepository {
+  constructor(
+    private readonly sessionId: string,
+    private readonly instance: string,
+  ) { }
+
+  public async findById(id: string): Promise<RawGroup | null> {
+    const foundGroup = await prisma.rawGroup.findUnique({ where: { id } });
+    if (!foundGroup) return null;
+
+    const groupData = resolveJson<GroupMetadata>(foundGroup.groupData);
+    return { ...foundGroup, groupData };
+  }
+
+  public async update(id: string, data: GroupMetadata, name?: string): Promise<void> {
+    await prisma.rawGroup.update({
+      where: { id },
+      data: {
+        ...(name ? { name } : {}),
+        groupData: JSON.stringify(data, BufferJSON.replacer),
+      },
+    });
+  }
+
+  public async upsert(id: string, group: Partial<GroupMetadata>, name?: string): Promise<void> {
+    const groupName = name || group.subject || null;
+
+    await prisma.rawGroup.upsert({
+      where: {
+        id,
+        sessionId: this.sessionId,
+      },
+      create: {
+        id,
+        name: groupName,
+        sessionId: this.sessionId,
+        instance: this.instance,
+        groupData: JSON.stringify(group, BufferJSON.replacer),
+      },
+      update: {
+        groupData: JSON.stringify(group, BufferJSON.replacer),
+        ...(groupName ? { name: groupName } : {}),
+      },
+    });
+  }
+
+  public async findMany() {
+    const groups = await prisma.rawGroup.findMany({
+      where: {
+        sessionId: this.sessionId,
+        instance: this.instance,
+      },
+    });
+    
+    return groups.map(group => ({
+      ...group,
+      groupData: resolveJson<GroupMetadata>(group.groupData),
+    }))
+  }
+}
+
+export default GroupsRepository;
