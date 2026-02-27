@@ -64,12 +64,12 @@ export interface RawMessage {
   updatedAt?: Date | null;
 }
 
-export interface RawGroupMetadata {
+export interface RawGroup {
   id: string;
   instance: string;
   sessionId: string;
-  remoteJid: string;
-  groupMetadata: GroupMetadata;
+  name: string | null;
+  groupData: GroupMetadata;
   createdAt?: Date;
   updatedAt?: Date | null;
 }

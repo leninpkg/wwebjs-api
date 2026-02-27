@@ -3,13 +3,13 @@ import { ILogger } from "baileys/lib/Utils/logger";
 import MessagesRepository from "./messages-repository";
 import shouldIgnoreMessage from "../../../helpers/should-ignore-message";
 
-interface UpsertMessageInput {
+interface UpsertMessageDto {
   message: WAMessage;
   logger: ILogger;
   repository: MessagesRepository;
 }
 
-async function upsertMessage({ message, logger, repository }: UpsertMessageInput) {
+async function upsertMessage({ message, logger, repository }: UpsertMessageDto) {
   try {
     const { ignore, reason } = shouldIgnoreMessage(message);
 

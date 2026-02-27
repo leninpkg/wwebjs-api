@@ -1,5 +1,5 @@
 import { BaileysEventEmitter, Chat, WAMessage, WAMessageKey } from "baileys";
-import { MessageMedia, RawContact, RawGroupMetadata, RawMessage } from "../types";
+import { MessageMedia, RawContact, RawGroup, RawMessage } from "../types";
 
 export interface GetMessagesOptions {
   startTime?: Date;
@@ -24,8 +24,8 @@ abstract class BaileysStore {
   abstract getMessage(id: string): Promise<RawMessage | null>;
   abstract getMessages(startTime?: Date, endTime?: Date): Promise<RawMessage[]>;
   abstract getMessagesByChat(options: GetMessagesByChatOptions): Promise<RawMessage[]>;
-  abstract getGroup(jid: string): Promise<RawGroupMetadata | null>;
-  abstract getGroups(): Promise<RawGroupMetadata[]>;
+  abstract getGroup(jid: string): Promise<RawGroup | null>;
+  abstract getGroups(): Promise<RawGroup[]>;
   abstract getContacts(): Promise<RawContact[]>;
   abstract getChats(): Promise<Chat[]>;
   abstract getContactByLid(jid: string): Promise<RawContact | null>;

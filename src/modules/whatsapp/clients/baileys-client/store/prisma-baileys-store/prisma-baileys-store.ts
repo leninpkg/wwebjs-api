@@ -3,7 +3,7 @@ import onlyDigits from "../../../../../../helpers/only-digits";
 import { extractLidFromKey } from "../../helpers/extract-lid-from-key";
 import { extractPhoneFromKey } from "../../helpers/extract-phone-from-key";
 import { PrismaLogger } from "../../logger/prisma-logger";
-import { MessageUpdateEvent, MessageUpsertEvent, RawContact, RawGroupMetadata, RawMessage } from "../../types";
+import { MessageUpdateEvent, MessageUpsertEvent, RawContact, RawGroup, RawMessage } from "../../types";
 import BaileysStore, { GetMessageMediaResult, GetMessagesByChatOptions } from "../baileys-store";
 import ContactsRepository from "./contacts/contacts-repository";
 import updateContact from "./contacts/update-contact";
@@ -12,12 +12,13 @@ import getMessageMedia from "./messages/get-message-media";
 import MessagesRepository from "./messages/messages-repository";
 import updateMessage from "./messages/update-message";
 import upsertMessage from "./messages/upsert-message";
-import RawGroupMetadataRepository from "./repositories/raw-group-metadata-repository";
+import GroupsRepository from "./groups/groups-repository";
+import updateGroup from "./groups/update-group";
 
 class PrismaBaileysStore implements BaileysStore {
-  private readonly messagesRepository: MessagesRepository;
-  private readonly contactsRepository: ContactsRepository;
-  private readonly rawGroupMetadataRepository: RawGroupMetadataRepository;
+  private readonly messagesRepo: MessagesRepository;
+  private readonly contactsRepo: ContactsRepository;
+  private readonly groupsRepo: GroupsRepository;
   private readonly emitterName = "WppStore";
 
   constructor(
@@ -25,9 +26,9 @@ class PrismaBaileysStore implements BaileysStore {
     private readonly sessionId: string,
     private readonly logger: PrismaLogger
   ) {
-    this.messagesRepository = new MessagesRepository(this.sessionId, this.instance);
-    this.contactsRepository = new ContactsRepository(this.sessionId, this.instance);
-    this.rawGroupMetadataRepository = new RawGroupMetadataRepository(this.sessionId, this.instance);
+    this.messagesRepo = new MessagesRepository(this.sessionId, this.instance);
+    this.contactsRepo = new ContactsRepository(this.sessionId, this.instance);
+    this.groupsRepo = new GroupsRepository(this.sessionId, this.instance);
   }
 
   private getLogger(operationName: string) {
@@ -42,20 +43,20 @@ class PrismaBaileysStore implements BaileysStore {
     ev.on("contacts.update", this.handleContactsUpdate.bind(this));
     ev.on("messages.upsert", this.handleMessagesUpsert.bind(this));
     ev.on("messages.update", this.handleMessagesUpdate.bind(this));
-    //ev.on("groups.update", this.handleGroupsUpdate.bind(this)); 
-    //ev.on("groups.upsert", this.handleGroupsUpsert.bind(this));
+    ev.on("groups.upsert", this.handleGroupsUpsert.bind(this));
+    ev.on("groups.update", this.handleGroupsUpdate.bind(this));
   }
 
   private async handleMessagesUpsert({ messages }: MessageUpsertEvent, logger = this.getLogger("hMsgUpsert")) {
     for (const message of messages) {
-      await upsertMessage({ logger, message, repository: this.messagesRepository });
+      await upsertMessage({ logger, message, repository: this.messagesRepo });
     }
   }
 
   private async handleMessagesUpdate(updates: MessageUpdateEvent) {
     const logger = this.getLogger("hMsgUpdate");
     for (const update of updates) {
-      await updateMessage({ logger, update, repository: this.messagesRepository });
+      await updateMessage({ logger, update, repository: this.messagesRepo });
     }
   }
 
@@ -66,43 +67,36 @@ class PrismaBaileysStore implements BaileysStore {
     logger.info(`Finished processing history set`);
   }
 
-  private async handleContactsUpdate(contacts: Partial<Contact>[], logger = this.getLogger("hCttUpdate")) {
-    for (const contact of contacts) {
-      await updateContact({ logger, contact, repository: this.contactsRepository });
-    }
-  }
-
   private async handleContactsUpsert(contacts: Contact[], logger = this.getLogger("hCttUpsert")) {
+    logger.info(`Upserting ${contacts.length} contacts`);
     for (const contact of contacts) {
-      await upsertContact({ logger, contact, repository: this.contactsRepository });
+      await upsertContact({ logger, contact, contactsRepo: this.contactsRepo, groupsRepo: this.groupsRepo });
     }
   }
 
-  private async handleGroupsUpdate(groups: Partial<GroupMetadata>[], logger = this.getLogger("hGroupsUpdate")) {
-    console.log(`[Store] Groups update: ${groups.length} groups`);
-
-    for (const group of groups) {
-      if (!group.id) continue;
-
-      const existing = await this.rawGroupMetadataRepository.findByRemoteJid(group.id);
-      if (!existing) continue;
-
-      const updatedMetadata = { ...existing.groupMetadata, ...group };
-
-      await this.rawGroupMetadataRepository.updateMetadata(existing.id, updatedMetadata);
+  private async handleContactsUpdate(contacts: Partial<Contact>[], logger = this.getLogger("hCttUpdate")) {
+    logger.info(`Updating ${contacts.length} contacts`);
+    for (const contact of contacts) {
+      await updateContact({ logger, contact, repository: this.contactsRepo });
     }
   }
 
   private async handleGroupsUpsert(groups: GroupMetadata[], logger = this.getLogger("hGroupsUpsert")) {
-    console.log(`[Store] Groups upsert: ${groups.length} groups`);
-
+    logger.info(`Upserting ${groups.length} groups`);
     for (const group of groups) {
-      await this.rawGroupMetadataRepository.upsert(group);
+      await this.groupsRepo.upsert(group.id, group);
+    }
+  }
+
+  private async handleGroupsUpdate(groups: Partial<GroupMetadata>[], logger = this.getLogger("hGroupsUpdate")) {
+    logger.info(`Updating ${groups.length} groups`);
+    for (const group of groups) {
+      await updateGroup({ logger, group, repository: this.groupsRepo });
     }
   }
 
   public async getMessage(id: string): Promise<RawMessage> {
-    const message = await this.messagesRepository.findById(id);
+    const message = await this.messagesRepo.findById(id);
 
     if (!message) {
       throw new Error(`Message with id ${id} not found`);
@@ -112,7 +106,7 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public async getMessages(startTime?: Date, endTime?: Date): Promise<RawMessage[]> {
-    const messages = await this.messagesRepository.findMany(startTime, endTime);
+    const messages = await this.messagesRepo.findMany(startTime, endTime);
 
     return messages.map((msg) => ({
       id: msg.id,
@@ -128,7 +122,7 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public async getMessagesByChat(options: GetMessagesByChatOptions): Promise<RawMessage[]> {
-    const messages = await this.messagesRepository.findMany(options.startTime, options.endTime, options.jid);
+    const messages = await this.messagesRepo.findMany(options.startTime, options.endTime, options.jid);
 
     return messages.map((msg) => ({
       id: msg.id,
@@ -143,39 +137,37 @@ class PrismaBaileysStore implements BaileysStore {
     }));
   }
 
-  public async getGroup(jid: string): Promise<RawGroupMetadata | null> {
-    return await this.rawGroupMetadataRepository.findByRemoteJid(jid);
+  public async getGroup(jid: string): Promise<RawGroup | null> {
+    return await this.groupsRepo.findById(jid);
   }
 
-  public async getGroups(): Promise<RawGroupMetadata[]> {
-    return await this.rawGroupMetadataRepository.findMany();
+  public async getGroups(): Promise<RawGroup[]> {
+    return await this.groupsRepo.findMany();
   }
 
   public async getContacts(): Promise<RawContact[]> {
-    return await this.contactsRepository.findMany();
+    return await this.contactsRepo.findMany();
   }
 
   public async getChats(): Promise<Chat[]> {
     return [];
   }
 
-  public async getContactByLid(_jid: string): Promise<RawContact | null> {
-    const possibleIds = _jid.includes("@") ? [_jid] : [_jid, `${_jid}@lid`];
+  public async getContactByLid(lid: string): Promise<RawContact | null> {
+    const normalizedLid = lid.split("@")[0];
+    if (!normalizedLid) return null;
 
-    const contact = await this.contactsRepository.findByPossibleIds(possibleIds);
+    const contact = await this.contactsRepo.findByLid(normalizedLid);
+    if (!contact) return null;
 
-    if (!contact) {
-      return null;
-    }
-
-    return this.contactsRepository.mapToRawContact(contact);
+    return this.contactsRepo.mapToRawContact(contact);
   }
 
   public async getContactByPhone(_phone: string): Promise<RawContact | null> {
     const normalizedPhone = onlyDigits(_phone);
-    const contact = await this.contactsRepository.findByPhone(normalizedPhone);
+    const contact = await this.contactsRepo.findByPhone(normalizedPhone);
 
-    return contact ? this.contactsRepository.mapToRawContact(contact) : null;
+    return contact ? this.contactsRepo.mapToRawContact(contact) : null;
   }
 
   public async getContactByKey(_key: WAMessageKey): Promise<RawContact | null> {
@@ -187,7 +179,7 @@ class PrismaBaileysStore implements BaileysStore {
       return phoneContact;
     }
 
-    const lidContact = await this.getContactByLid(lid!);
+    const lidContact = lid ? await this.getContactByLid(lid) : null;
     if (lidContact) {
       return lidContact;
     }
@@ -196,7 +188,7 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public async getMessageMedia(message: WAMessage, logger = this.getLogger("getMessageMedia")): Promise<GetMessageMediaResult> {
-    return await getMessageMedia({ message, logger, repository: this.messagesRepository, instance: this.instance });
+    return await getMessageMedia({ message, logger, repository: this.messagesRepo, instance: this.instance });
   }
 }
 

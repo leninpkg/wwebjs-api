@@ -5,7 +5,7 @@ import { extractMessageType } from "../../../helpers/get-message-type";
 import { GetMessageMediaResult } from "../../baileys-store";
 import MessagesRepository from "./messages-repository";
 
-interface GetMessageMediaOptions {
+interface GetMessageMediaDto {
   instance: string;
   message: WAMessage;
   logger: ILogger;
@@ -18,7 +18,7 @@ type ExtractedMediaInfo = {
   fileSize: number | null;
 };
 
-async function getMessageMedia({ instance, message, logger, repository }: GetMessageMediaOptions): Promise<GetMessageMediaResult> {
+async function getMessageMedia({ instance, message, logger, repository }: GetMessageMediaDto): Promise<GetMessageMediaResult> {
   try {
     if (!message.key.id) {
       logger.warn({ message }, "Cannot get media for message without ID");

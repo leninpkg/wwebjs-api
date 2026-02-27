@@ -2,13 +2,13 @@ import { WAMessageUpdate } from "baileys";
 import { ILogger } from "baileys/lib/Utils/logger";
 import MessagesRepository from "./messages-repository";
 
-interface UpdateMessageInput {
+interface UpdateMessageDto {
   update: WAMessageUpdate;
   logger: ILogger;
   repository: MessagesRepository;
 }
 
-async function updateMessage({ update, logger, repository }: UpdateMessageInput) {
+async function updateMessage({ update, logger, repository }: UpdateMessageDto) {
   try {
     if (!update.key.id) {
       logger.warn({ update }, "Received message update without ID, skipping");
