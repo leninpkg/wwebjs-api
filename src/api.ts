@@ -1,5 +1,5 @@
-import { Logger } from "@in.pulse-crm/utils";
 import express, { NextFunction, Request, Response, Router } from "express";
+import { PrismaLogger } from "./modules/whatsapp/clients/baileys-client/logger/prisma-logger";
 import WhatsappClient from "./modules/whatsapp/clients/whatsapp-client";
 
 
@@ -7,9 +7,12 @@ class ExpressApi {
   private client: WhatsappClient;
   private app: express.Express;
   private router: Router;
+  private logger: PrismaLogger;;
 
-  private constructor(client: WhatsappClient) {
+  public constructor(client: WhatsappClient, logger: PrismaLogger) {
     this.client = client;
+    this.logger = logger;
+
     this.app = express();
     this.router = Router();
 
@@ -25,13 +28,9 @@ class ExpressApi {
     this.app.use(this.errorHandler.bind(this));
   }
 
-  public static create(client: WhatsappClient): ExpressApi {
-    return new ExpressApi(client);
-  }
-
   public listen(listenPort: number): void {
     this.app.listen(listenPort, () => {
-      console.log(`Server is running on port ${listenPort}`);
+      this.logger.info(`API server is running on port ${listenPort}`, undefined, "ExpressApi", "listen");
     });
   }
 
@@ -39,14 +38,8 @@ class ExpressApi {
     res.status(200).send("OK");
   }
 
-  private errorHandler(error: Error, req: Request, res: Response, _next: NextFunction): void {
-    console.error("[API] Unhandled error in request:", {
-      method: req.method,
-      path: req.path,
-      body: req.body,
-      error: error.message,
-      stack: error.stack
-    });
+  private errorHandler(error: Error, _req: Request, res: Response, _next: NextFunction): void {
+    this.logger.error(error, "Unhandled error in API request", "ExpressApi", "errorHandler");
 
     res.status(500).json({
       error: "Internal server error",
@@ -59,13 +52,10 @@ class ExpressApi {
     try {
       const { isGroup, ...messageOptions } = req.body;
 
-      Logger.debug("[API] Sending message with options:", messageOptions);
-
       const result = await this.client.sendMessage(messageOptions, isGroup || false);
       res.status(201).send(result);
     } catch (error) {
-      console.error("[API] Error sending message:", error);
-      console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
+      this.logger.error(error, "Error sending message", "ExpressApi", "sendMessage");
       res.status(500).json({
         error: "Internal server error",
         message: error instanceof Error ? error.message : String(error),
@@ -79,8 +69,7 @@ class ExpressApi {
       const result = await this.client.editMessage(req.body);
       res.status(200).send(result);
     } catch (error) {
-      console.error("[API] Error editing message:", error);
-      console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
+      this.logger.error(error, "Error editing message", "ExpressApi", "editMessage");
       res.status(500).json({
         error: "Internal server error",
         message: error instanceof Error ? error.message : String(error),
@@ -91,11 +80,10 @@ class ExpressApi {
 
   private async getGroups(_req: Request, res: Response): Promise<void> {
     try {
-      Logger.debug("[API] Fetching WhatsApp groups");
       const groups = await this.client.getGroups();
       res.status(200).json({ groups });
     } catch (error) {
-      console.error("[API] Error fetching groups:", error);
+      this.logger.error(error, "Error fetching groups", "ExpressApi", "getGroups");
       res.status(500).json({
         error: "Internal server error",
         message: error instanceof Error ? error.message : String(error),

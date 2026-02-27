@@ -49,8 +49,8 @@ async function runApp() {
   }
 
   const eventEmitter = new HttpWppEventEmitter(endpoints);
-  const store = new PrismaBaileysStore(instance, sessionId);
-  const logger = new PrismaLogger("info", { sessionId, instance });
+  const logger = new PrismaLogger("info", { sessionId, instance }, "BaileysClient");
+  const store = new PrismaBaileysStore(instance, sessionId, logger);
   const auth = await PrismaBaileysAuth.fromSession(sessionId);
   const wppClient = await BaileysWhatsappClient.build({
     auth,
@@ -62,7 +62,7 @@ async function runApp() {
     logger
   });
 
-  const api = ExpressApi.create(wppClient);
+  const api = new ExpressApi(wppClient, logger);
   api.listen(listenPort);
 }
 
