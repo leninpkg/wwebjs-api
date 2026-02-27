@@ -1,4 +1,3 @@
-import { Logger } from "@in.pulse-crm/utils";
 import { AuthenticationCreds, AuthenticationState, BufferJSON, initAuthCreds, proto, SignalDataTypeMap } from "baileys";
 import { prisma } from "../../../../../prisma";
 import BaileysAuth from "./baileys-auth";
@@ -13,18 +12,19 @@ class PrismaBaileysAuth implements BaileysAuth {
   }
 
   public static async fromSession(sessionId: string): Promise<PrismaBaileysAuth> {
+    console.log(`(BaileysAuth<${sessionId}>): Initializing auth state from session`);
     const creds = await PrismaBaileysAuth.loadCredentials(sessionId);
+    console.log(`(BaileysAuth<${sessionId}>): Auth state initialized`);
     return new PrismaBaileysAuth(sessionId, creds);
   }
 
   private static parse(value: any): any {
     if (!value) return null;
     try {
-      // O Prisma já retorna o objeto do campo Json, então só precisamos aplicar o reviver
       const raw = JSON.stringify(value);
       return JSON.parse(raw, BufferJSON.reviver);
     } catch (error) {
-      Logger.error('Failed to parse data:', error as Error);
+      console.error('Failed to parse data:', error as Error);
       return null;
     }
   }
@@ -34,23 +34,21 @@ class PrismaBaileysAuth implements BaileysAuth {
       where: { sessionId, key }
     });
 
+    if (!data) {
+      return null;
+    }
+
+
     return PrismaBaileysAuth.parse(data?.value);
   }
 
   private static async loadCredentials(sessionId: string): Promise<AuthenticationCreds> {
     const loadedCreds = await PrismaBaileysAuth.readData(sessionId, "creds");
+    console.log(`(BaileysAuth<${sessionId}>): Credentials ${loadedCreds ? "loaded from database" : "not found, creating new"}`);
     return loadedCreds || initAuthCreds();
   }
 
-  private debug(message: string, obj?: any) {
-    Logger.debug(`(BaileysAuth<${this._sessionId}>): ${message}`, obj);
-  }
-
   private async writeData(key: string, value: any) {
-    this.debug(`${key} | <${typeof value}>:`, value);
-
-    // O Prisma espera um objeto JavaScript para campos Json, não uma string
-    // Usamos JSON.parse/stringify com replacer para serializar Buffers corretamente
     const valueFixed = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
 
     try {
@@ -71,13 +69,12 @@ class PrismaBaileysAuth implements BaileysAuth {
         }
       });
     } catch (error) {
-      Logger.error(`Failed to write data for key ${key}:`, error as Error);
+      console.error(`Failed to write data for key ${key}:`, error as Error);
       throw error;
     }
   }
 
   private async removeData(key: string) {
-    this.debug(`Removing key: ${key}`);
     try {
       await prisma.baileysAuth.delete({
         where: {
@@ -90,7 +87,7 @@ class PrismaBaileysAuth implements BaileysAuth {
     } catch (error) {
       // Ignora erro se o registro não existir
       if ((error as any).code !== 'P2025') {
-        Logger.error(`Failed to remove data for key ${key}:`, error as Error);
+        console.error(`Failed to remove data for key ${key}:`, error as Error);
         throw error;
       }
     }
@@ -133,8 +130,7 @@ class PrismaBaileysAuth implements BaileysAuth {
               }
               data[id] = value;
             })
-          );
-          return data;
+          ); return data;
         },
         set: async (data) => {
           const tasks: Array<Promise<void>> = [];
@@ -146,7 +142,7 @@ class PrismaBaileysAuth implements BaileysAuth {
               // Encapsula cada task para capturar erros individualmente
               tasks.push(
                 task.catch((error) => {
-                  Logger.error(`Failed to process key ${key}:`, error);
+                  console.error(`Failed to process key ${key}:`, error);
                   // Re-throw para que o Baileys saiba que falhou
                   throw error;
                 })
