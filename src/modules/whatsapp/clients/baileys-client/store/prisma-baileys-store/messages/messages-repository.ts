@@ -10,7 +10,7 @@ interface UpsertRawMessageInput {
   messageData: proto.IMessage;
 }
 
-class RawMessageRepository {
+class MessagesRepository {
   constructor(
     private readonly sessionId: string,
     private readonly instance: string,
@@ -45,7 +45,7 @@ class RawMessageRepository {
     return { ...message, keyData, messageData };
   }
 
-  public async updateMessageData(id: string, messageData: proto.IMessage): Promise<void> {
+  public async update(id: string, messageData: proto.IMessage): Promise<void> {
     const string = JSON.stringify(messageData, BufferJSON.replacer);
     const object = JSON.parse(string);
 
@@ -100,4 +100,4 @@ class RawMessageRepository {
   }
 }
 
-export default RawMessageRepository;
+export default MessagesRepository;

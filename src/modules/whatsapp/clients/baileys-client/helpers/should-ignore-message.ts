@@ -1,16 +1,21 @@
 import { isJidMetaAI, isJidNewsletter, isJidStatusBroadcast, WAMessage } from "baileys";
 
-export default function shouldIgnoreMessage(message: WAMessage): boolean {
-  if (!message.key.id) return true;
-  if (!message.key.remoteJid) return true;
-  if (!message.messageTimestamp) return true;
+interface ShouldIgnoreResult {
+  ignore: boolean;
+  reason: string;
+}
 
-  if (isJidStatusBroadcast(message.key.remoteJid)) return true;
-  if (isJidMetaAI(message.key.remoteJid)) return true;
-  if (isJidNewsletter(message.key.remoteJid)) return true;
-  if (message.key.fromMe) return true;
-  if (message.message?.reactionMessage) return true;
-  if (message.message?.protocolMessage) return true;
+export default function shouldIgnoreMessage(message: WAMessage): ShouldIgnoreResult {
+  if (!message.key.id) return { ignore: true, reason: "Missing message ID" };
+  if (!message.key.remoteJid) return { ignore: true, reason: "Missing remote JID" };
+  if (!message.messageTimestamp) return { ignore: true, reason: "Missing message timestamp" };
 
-  return false;
+  if (isJidStatusBroadcast(message.key.remoteJid)) return { ignore: true, reason: "Status broadcast" };
+  if (isJidMetaAI(message.key.remoteJid)) return { ignore: true, reason: "Meta AI" };
+  if (isJidNewsletter(message.key.remoteJid)) return { ignore: true, reason: "Newsletter" };
+  if (message.key.fromMe) return { ignore: true, reason: "Message from self" };
+  if (message.message?.reactionMessage) return { ignore: true, reason: "Reaction message" };
+  if (message.message?.protocolMessage) return { ignore: true, reason: "Protocol message" };
+
+  return { ignore: false, reason: "" };
 }

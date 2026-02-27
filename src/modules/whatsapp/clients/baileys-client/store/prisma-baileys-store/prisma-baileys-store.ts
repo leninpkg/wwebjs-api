@@ -2,20 +2,21 @@ import { BaileysEventEmitter, BaileysEventMap, Chat, Contact, GroupMetadata, pro
 import onlyDigits from "../../../../../../helpers/only-digits";
 import { extractLidFromKey } from "../../helpers/extract-lid-from-key";
 import { extractPhoneFromKey } from "../../helpers/extract-phone-from-key";
-import shouldIgnoreMessage from "../../helpers/should-ignore-message";
 import { PrismaLogger } from "../../logger/prisma-logger";
 import { MessageFile, MessageUpdateEvent, MessageUpsertEvent, RawContact, RawGroupMetadata, RawMessage } from "../../types";
 import BaileysStore, { GetMessagesByChatOptions } from "../baileys-store";
 import ContactsRepository from "./contacts/contacts-repository";
 import updateContact from "./contacts/update-contact";
+import upsertContact from "./contacts/upsert-contact";
+import MessagesRepository from "./messages/messages-repository";
 import RawGroupMetadataRepository from "./repositories/raw-group-metadata-repository";
 import RawMessageFileRepository from "./repositories/raw-message-file-repository";
-import RawMessageRepository from "./repositories/raw-message-repository";
 import MediaService from "./services/media-service";
-import upsertContact from "./contacts/upsert-contact";
+import upsertMessage from "./messages/upsert-message";
+import updateMessage from "./messages/update-message";
 
 class PrismaBaileysStore implements BaileysStore {
-  private readonly rawMessageRepository: RawMessageRepository;
+  private readonly messagesRepository: MessagesRepository;
   private readonly contactsRepository: ContactsRepository;
   private readonly rawGroupMetadataRepository: RawGroupMetadataRepository;
   private readonly mediaService: MediaService;
@@ -26,7 +27,7 @@ class PrismaBaileysStore implements BaileysStore {
     private readonly sessionId: string,
     private readonly logger: PrismaLogger
   ) {
-    this.rawMessageRepository = new RawMessageRepository(this.sessionId, this.instance);
+    this.messagesRepository = new MessagesRepository(this.sessionId, this.instance);
     this.contactsRepository = new ContactsRepository(this.sessionId, this.instance);
     this.rawGroupMetadataRepository = new RawGroupMetadataRepository(this.sessionId, this.instance);
     this.mediaService = new MediaService(
@@ -45,9 +46,9 @@ class PrismaBaileysStore implements BaileysStore {
   public bind(ev: BaileysEventEmitter): void {
     ev.on("messaging-history.set", this.handleHistorySet.bind(this));
     ev.on("contacts.upsert", this.handleContactsUpsert.bind(this));
-    //ev.on("messages.upsert", this.handleMessagesUpsert.bind(this));
-    //ev.on("messages.update", this.handleMessagesUpdate.bind(this));
-    //ev.on("contacts.update", this.handleContactsUpdate.bind(this));
+    ev.on("contacts.update", this.handleContactsUpdate.bind(this));
+    ev.on("messages.upsert", this.handleMessagesUpsert.bind(this));
+    ev.on("messages.update", this.handleMessagesUpdate.bind(this));
     //ev.on("chats.upsert", this.handleChatsUpsert.bind(this));
     //ev.on("chats.update", this.handleChatsUpdate.bind(this));
     //ev.on("groups.update", this.handleGroupsUpdate.bind(this));
@@ -55,29 +56,16 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   private async handleMessagesUpsert({ messages }: MessageUpsertEvent) {
-    for (const data of messages) {
-      if (shouldIgnoreMessage(data) || !data.message) continue;
-
-      await this.rawMessageRepository.upsert({
-        id: data.key.id!,
-        timestamp: String(data.messageTimestamp),
-        remoteJid: data.key.remoteJid!,
-        keyData: data.key,
-        messageData: data.message || {},
-      });
+    const logger = this.getLogger("hMsgUpsert");
+    for (const message of messages) {
+      await upsertMessage({ logger, message, repository: this.messagesRepository });
     }
   }
 
   private async handleMessagesUpdate(updates: MessageUpdateEvent) {
+    const logger = this.getLogger("hMsgUpdate");
     for (const update of updates) {
-      const existing = await this.rawMessageRepository.findById(update.key.id!);
-
-      if (!existing) continue;
-
-      const messageData = typeof existing.messageData === "object" ? existing.messageData as proto.IMessage : {};
-      const updatedMessageData = { ...messageData, ...update.update.message };
-
-      await this.rawMessageRepository.updateMessageData(update.key.id!, updatedMessageData);
+      await updateMessage({ logger, update, repository: this.messagesRepository });
     }
   }
 
@@ -102,14 +90,14 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   private async handleContactsUpdate(contacts: Partial<Contact>[]) {
-    const logger = this.getLogger("handleContactsUpdate");
+    const logger = this.getLogger("hCttUpdate");
     for (const contact of contacts) {
       await updateContact({ logger, contact, repository: this.contactsRepository });
     }
   }
 
   private async handleContactsUpsert(contacts: Contact[]) {
-    const logger = this.getLogger("handleContactsUpsert");
+    const logger = this.getLogger("hCttUpsert");
     for (const contact of contacts) {
       await upsertContact({ logger, contact, repository: this.contactsRepository });
     }
@@ -147,7 +135,7 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public async getMessage(id: string): Promise<RawMessage> {
-    const message = await this.rawMessageRepository.findById(id);
+    const message = await this.messagesRepository.findById(id);
 
     if (!message) {
       throw new Error(`Message with id ${id} not found`);
@@ -157,7 +145,7 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public async getMessages(startTime?: Date, endTime?: Date): Promise<RawMessage[]> {
-    const messages = await this.rawMessageRepository.findMany(startTime, endTime);
+    const messages = await this.messagesRepository.findMany(startTime, endTime);
 
     return messages.map((msg) => ({
       id: msg.id,
@@ -173,7 +161,7 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public async getMessagesByChat(options: GetMessagesByChatOptions): Promise<RawMessage[]> {
-    const messages = await this.rawMessageRepository.findMany(options.startTime, options.endTime, options.jid);
+    const messages = await this.messagesRepository.findMany(options.startTime, options.endTime, options.jid);
 
     return messages.map((msg) => ({
       id: msg.id,
