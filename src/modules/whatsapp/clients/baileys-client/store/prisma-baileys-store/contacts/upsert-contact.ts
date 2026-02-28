@@ -1,7 +1,7 @@
-import { Contact, GroupMetadata, isLidUser, isPnUser } from "baileys";
+import { Contact, GroupMetadata, isPnUser } from "baileys";
 import { ILogger } from "baileys/lib/Utils/logger";
-import ContactsRepository from "./contacts-repository";
 import GroupsRepository from "../groups/groups-repository";
+import ContactsRepository from "./contacts-repository";
 
 interface UpsertContactDto {
   contact: Contact;
@@ -26,7 +26,7 @@ const getContactLid = (contact: Contact): string | null => {
     return contact.lid.split("@")[0] || null;
   }
 
-  if (isLidUser(contact.id)) {
+  if (contact.id.endsWith('@lid')) {
     return contact.id.split("@")[0] || null;
   }
   return null;
