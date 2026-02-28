@@ -1,6 +1,7 @@
 import { Contact } from "baileys";
 import ContactsRepository, { UpdateRawContactInput } from "./contacts-repository";
 import { ILogger } from "baileys/lib/Utils/logger";
+import { getContactLid, getContactPhone } from "../../../helpers/contact-helpers";
 
 interface UpdateContactDto {
   contact: Partial<Contact>;
@@ -34,8 +35,8 @@ async function updateContact({ contact, logger, repository }: UpdateContactDto):
     if (typeof contact.verifiedName !== "undefined") data.verifiedName = contact.verifiedName;
     if (typeof contact.imgUrl !== "undefined") data.imgUrl = contact.imgUrl;
     if (typeof contact.status !== "undefined") data.status = contact.status;
-    if (typeof contact.phoneNumber !== "undefined") data.phoneNumber = contact.phoneNumber;
-    if (typeof contact.lid !== "undefined") data.lid = contact.lid;
+    if (typeof contact.phoneNumber !== "undefined") data.phoneNumber = getContactPhone(contact);
+    if (typeof contact.lid !== "undefined") data.lid = getContactLid(contact);
 
     logger.debug({ data }, "Prepared contact update data");
     await repository.updateById(existing.id, data);
