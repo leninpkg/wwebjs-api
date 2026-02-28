@@ -14,6 +14,7 @@ import updateMessage from "./messages/update-message";
 import upsertMessage from "./messages/upsert-message";
 import GroupsRepository from "./groups/groups-repository";
 import updateGroup from "./groups/update-group";
+import updateLidMapping from "./contacts/update-lid-mapping";
 
 class PrismaBaileysStore implements BaileysStore {
   private readonly messagesRepo: MessagesRepository;
@@ -45,6 +46,7 @@ class PrismaBaileysStore implements BaileysStore {
     ev.on("messages.update", this.handleMessagesUpdate.bind(this));
     ev.on("groups.upsert", this.handleGroupsUpsert.bind(this));
     ev.on("groups.update", this.handleGroupsUpdate.bind(this));
+    ev.on("lid-mapping.update", this.handleLidMappingUpdate.bind(this));
   }
 
   private async handleMessagesUpsert({ messages }: MessageUpsertEvent, logger = this.getLogger("hMsgUpsert")) {
@@ -93,6 +95,10 @@ class PrismaBaileysStore implements BaileysStore {
     for (const group of groups) {
       await updateGroup({ logger, group, repository: this.groupsRepo });
     }
+  }
+
+  private async handleLidMappingUpdate({ lid, pn }: { lid: string, pn: string }) {
+    await updateLidMapping({ lid, pn, repository: this.contactsRepo });
   }
 
   public async getMessage(id: string): Promise<RawMessage> {

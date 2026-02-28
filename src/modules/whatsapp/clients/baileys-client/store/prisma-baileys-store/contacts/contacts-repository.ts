@@ -67,6 +67,23 @@ class ContactsRepository {
     });
   }
 
+  public async updateLidPn(lid: string, phoneNumber: string): Promise<void> {
+    await prisma.rawContact.updateMany({
+      where: {
+        sessionId: this.sessionId,
+        instance: this.instance,
+        OR: [
+          { lid },
+          { phoneNumber },
+        ]
+      },
+      data: {
+        lid,
+        phoneNumber,
+      }
+    });
+  }
+
   public async upsert(input: UpsertRawContactDto): Promise<void> {
     await prisma.rawContact.upsert({
       where: {
