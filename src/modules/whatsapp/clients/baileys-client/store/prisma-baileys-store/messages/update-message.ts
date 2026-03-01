@@ -8,17 +8,17 @@ interface UpdateMessageDto {
   repository: MessagesRepository;
 }
 
-async function updateMessage({ update, logger, repository }: UpdateMessageDto) {
+async function updateMessage({ update, logger, repository }: UpdateMessageDto): Promise<boolean> {
   try {
     if (!update.key.id) {
       logger.warn({ update }, "Received message update without ID, skipping");
-      return;
+      return false;
     }
 
     const existing = await repository.findById(update.key.id);
     if (!existing) {
       logger.warn({ update }, `Received update for message ID ${update.key.id} which does not exist in the database, skipping`);
-      return;
+      return false;
     }
 
     logger.debug(existing.messageData, 'Existing message data');
@@ -29,8 +29,10 @@ async function updateMessage({ update, logger, repository }: UpdateMessageDto) {
 
     await repository.update(update.key.id, newMessageData);
     logger.info({ update, updateMsgData: newMessageData, }, `Message with ID ${update.key.id} updated successfully`);
+    return true;
   } catch (err) {
     logger.error(err, `Failed to update message with ID ${update.key.id}`);
+    return false;
   }
 }
 

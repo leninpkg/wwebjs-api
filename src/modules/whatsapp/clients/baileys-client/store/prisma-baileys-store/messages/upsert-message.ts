@@ -12,13 +12,13 @@ interface UpsertMessageDto {
   repository: MessagesRepository;
 }
 
-async function upsertMessage({ instance, message, logger, repository }: UpsertMessageDto) {
+async function upsertMessage({ instance, message, logger, repository }: UpsertMessageDto): Promise<boolean> {
   try {
     const { ignore, reason } = shouldIgnoreMessage(message);
 
     if (ignore) {
       logger.info(`Message with ID ${message.key.id} ignored: ${reason}`);
-      return;
+      return false;
     }
 
     await repository.upsert({
@@ -36,8 +36,10 @@ async function upsertMessage({ instance, message, logger, repository }: UpsertMe
       logger.info(`Media for message with ID ${message.key.id} processed successfully`);
     }
     logger.info(`Message with ID ${message.key.id} upserted successfully`);
+    return true;
   } catch (err) {
     logger.error(err, `Failed to upsert message with ID ${message.key.id}`);
+    return false;
   }
 }
 

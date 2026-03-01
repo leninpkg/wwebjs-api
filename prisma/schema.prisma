@@ -55,9 +55,9 @@ model RawMessage {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  parsedMessage     InpulseMessage?
-  messageSyncStatus MessageProcessingStatus?
-  file              RawMessageFile?
+  inpulseMessage      InpulseMessage?
+  messageSyncStatuses MessageProcessingStatus[]
+  file                RawMessageFile?
 
   @@index([instance], name: "idx_raw_messages_instance")
   @@index([remoteJid], name: "idx_raw_messages_remote_jid")
@@ -126,16 +126,24 @@ model InpulseMessage {
 }
 
 model MessageProcessingStatus {
-  messageId String @map("message_id")
-  sessionId String @map("session_id")
-
-  isParsed  Boolean @map("is_parsed")
-  isSaved   Boolean @map("is_saved")
-  isUpdated Boolean @map("is_updated")
+  id             String                 @id @default(nanoid())
+  messageId      String                 @map("message_id")
+  sessionId      String                 @map("session_id")
+  processingType MessageProcessingType  @map("processing_type")
+  status         MessageProcessingState @default(PENDING)
+  attempts       Int                    @default(0)
+  nextAttemptAt  DateTime?              @map("next_attempt_at")
+  processingAt   DateTime?              @map("processing_at")
+  processedAt    DateTime?              @map("processed_at")
+  lastError      String?                @map("last_error") @db.Text
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
 
   message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  @@unique([messageId], name: "uq_message_processing_status_message_id")
+  @@unique([messageId, processingType], name: "uq_message_processing_status_message_id_type")
+  @@index([sessionId, status], name: "idx_message_processing_status_session_status")
+  @@index([status, nextAttemptAt], name: "idx_message_processing_status_queue")
   @@map("message_processing_status")
 }
 
@@ -198,4 +206,16 @@ enum WhatsappApiType {
   wwebjs
   gupshup
   waba
+}
+
+enum MessageProcessingState {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+enum MessageProcessingType {
+  RECEIVE
+  EDIT
 }
