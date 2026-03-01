@@ -9,6 +9,7 @@ export default function shouldIgnoreMessage(message: WAMessage): ShouldIgnoreRes
   if (!message.key.id) return { ignore: true, reason: "Missing message ID" };
   if (!message.key.remoteJid) return { ignore: true, reason: "Missing remote JID" };
   if (!message.messageTimestamp) return { ignore: true, reason: "Missing message timestamp" };
+  if (!message.message) return { ignore: true, reason: "Missing message content" };
 
   if (isJidStatusBroadcast(message.key.remoteJid)) return { ignore: true, reason: "Status broadcast" };
   if (isJidMetaAI(message.key.remoteJid)) return { ignore: true, reason: "Meta AI" };
