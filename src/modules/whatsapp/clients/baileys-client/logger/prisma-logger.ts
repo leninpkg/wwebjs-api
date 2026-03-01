@@ -1,7 +1,6 @@
-import { prisma } from "../../../../../prisma";
-import { Prisma } from "../../../../../generated/prisma/client";
-import { ConsoleLogger } from "./console-logger";
 import { ILogger } from "baileys/lib/Utils/logger";
+import { prisma } from "../../../../../prisma";
+import { ConsoleLogger } from "./console-logger";
 
 interface LogContext {
   sessionId: string;
@@ -21,7 +20,7 @@ export class PrismaLogger extends ConsoleLogger {
     operationName: string | null;
     correlationId: string | null;
     message: string;
-    metadata: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
+    metadata: string;
     sessionId: string;
     instance: string;
   }> = [];
@@ -60,18 +59,18 @@ export class PrismaLogger extends ConsoleLogger {
     return logger;
   }
 
-  private normalizeMetadata(metadata?: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
+  private normalizeMetadata(metadata?: unknown): string {
     if (typeof metadata === "undefined" || metadata === null) {
-      return Prisma.JsonNull;
+      return JSON.stringify(null);
     }
 
     try {
-      return JSON.parse(JSON.stringify(metadata));
+      return JSON.stringify(metadata);
     } catch {
-      return {
+      return JSON.stringify({
         serializationError: "Failed to serialize metadata",
         metadataType: metadata?.constructor?.name || typeof metadata,
-      };
+      });
     }
   }
 
