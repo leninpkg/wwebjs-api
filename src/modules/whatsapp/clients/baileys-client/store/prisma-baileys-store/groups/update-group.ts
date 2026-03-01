@@ -21,9 +21,10 @@ async function updateGroup({ group, logger, repository }: UpdateGroupDto) {
       return;
     }
 
+    const updatedName = group.subject || existing.name || undefined;
     const updatedMetadata = { ...existing.groupData, ...group };
 
-    await repository.update(group.id, updatedMetadata);
+    await repository.upsert(group.id, updatedMetadata, updatedName);
     logger.info(`Group with ID ${group.id} updated successfully`);
   } catch (err) {
     logger.error(err, `Failed to update group with ID ${group.id}`);

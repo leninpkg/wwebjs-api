@@ -40,6 +40,15 @@ class MessagesRepository {
     });
   }
 
+  public async update(id: string, messageData: proto.IMessage): Promise<void> {
+    await prisma.rawMessage.update({
+      where: { id },
+      data: {
+        messageData: JSON.stringify(messageData, BufferJSON.replacer),
+      },
+    });
+  }
+
   public async findById(id: string) {
     const message = await prisma.rawMessage.findUnique({ where: { id } });
     if (!message) return null;
@@ -48,18 +57,6 @@ class MessagesRepository {
     const messageData = resolveJson<proto.IMessage>(message.messageData);
 
     return { ...message, keyData, messageData };
-  }
-
-  public async update(id: string, messageData: proto.IMessage): Promise<void> {
-    const string = JSON.stringify(messageData, BufferJSON.replacer);
-    const object = JSON.parse(string);
-
-    await prisma.rawMessage.update({
-      where: { id },
-      data: {
-        messageData: JSON.stringify(object, BufferJSON.replacer),
-      },
-    });
   }
 
   public async findMany(startTime?: Date, endTime?: Date, remoteJid?: string) {

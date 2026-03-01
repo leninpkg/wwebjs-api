@@ -17,18 +17,9 @@ class GroupsRepository {
     return { ...foundGroup, groupData };
   }
 
-  public async update(id: string, data: GroupMetadata, name?: string): Promise<void> {
-    await prisma.rawGroup.update({
-      where: { id },
-      data: {
-        ...(name ? { name } : {}),
-        groupData: JSON.stringify(data, BufferJSON.replacer),
-      },
-    });
-  }
-
   public async upsert(id: string, group: Partial<GroupMetadata>, name?: string): Promise<void> {
     const groupName = name || group.subject || null;
+    const groupData = JSON.stringify(group, BufferJSON.replacer);
 
     await prisma.rawGroup.upsert({
       where: {
@@ -40,10 +31,10 @@ class GroupsRepository {
         name: groupName,
         sessionId: this.sessionId,
         instance: this.instance,
-        groupData: JSON.stringify(group, BufferJSON.replacer),
+        groupData,
       },
       update: {
-        groupData: JSON.stringify(group, BufferJSON.replacer),
+        groupData,
         ...(groupName ? { name: groupName } : {}),
       },
     });
