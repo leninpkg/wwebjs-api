@@ -18,17 +18,6 @@ class PrismaBaileysAuth implements BaileysAuth {
     return new PrismaBaileysAuth(sessionId, creds);
   }
 
-  private static parse(value: any): any {
-    if (!value) return null;
-    try {
-      const raw = JSON.stringify(value);
-      return JSON.parse(raw, BufferJSON.reviver);
-    } catch (error) {
-      console.error('Failed to parse data:', error as Error);
-      return null;
-    }
-  }
-
   private static async readData(sessionId: string, key: string): Promise<any> {
     const data = await prisma.baileysAuth.findFirst({
       where: { sessionId, key }
@@ -38,8 +27,7 @@ class PrismaBaileysAuth implements BaileysAuth {
       return null;
     }
 
-
-    return PrismaBaileysAuth.parse(data?.value);
+    return JSON.parse(data.value, BufferJSON.reviver);
   }
 
   private static async loadCredentials(sessionId: string): Promise<AuthenticationCreds> {
@@ -49,18 +37,12 @@ class PrismaBaileysAuth implements BaileysAuth {
   }
 
   private async writeData(key: string, value: any) {
-    const valueFixed = JSON.parse(JSON.stringify(value, BufferJSON.replacer));
+    value = JSON.stringify(value, BufferJSON.replacer);
 
     try {
       await prisma.baileysAuth.upsert({
-        create: {
-          sessionId: this.sessionId,
-          key,
-          value: valueFixed
-        },
-        update: {
-          value: valueFixed
-        },
+        create: { sessionId: this.sessionId, key, value },
+        update: { value },
         where: {
           uq_baileys_data_session_id_key: {
             sessionId: this.sessionId,
