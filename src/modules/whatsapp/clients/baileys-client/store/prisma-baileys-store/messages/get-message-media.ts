@@ -37,6 +37,7 @@ async function getMessageMedia({ instance, message, logger, repository }: GetMes
     }
 
     const mediaBuffer = await downloadMediaMessage(message, "buffer", {});
+    logger.debug({ mediaInfo, bufferSize: mediaBuffer.length }, "Media downloaded successfully, proceeding to upload");
     const savedFile = await uploadFile(mediaBuffer, mediaInfo.fileName, mediaInfo.fileType, instance);
     const savedMedia = await repository.insertMedia({ messageId: message.key.id, inpulseId: savedFile.id });
 

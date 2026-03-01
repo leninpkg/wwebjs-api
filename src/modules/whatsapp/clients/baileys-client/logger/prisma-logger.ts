@@ -12,6 +12,10 @@ export class PrismaLogger extends ConsoleLogger {
   private static readonly FLUSH_INTERVAL_MS = 250;
   private static readonly BATCH_SIZE = 25;
   private static readonly MAX_QUEUE_SIZE = 500;
+  private static readonly MAX_STRING_LENGTH = 2_000;
+  private static readonly MAX_ARRAY_ITEMS = 50;
+  private static readonly MAX_OBJECT_KEYS = 50;
+  private static readonly MAX_METADATA_LENGTH = 10_000;
 
   private context: LogContext;
   private readonly pendingLogs: Array<{
@@ -65,7 +69,60 @@ export class PrismaLogger extends ConsoleLogger {
     }
 
     try {
-      return JSON.stringify(metadata);
+      const visited = new WeakSet<object>();
+
+      const serialized = JSON.stringify(metadata, (_key, value) => {
+        if (typeof value === "string" && value.length > PrismaLogger.MAX_STRING_LENGTH) {
+          return `${value.slice(0, PrismaLogger.MAX_STRING_LENGTH)}...[omitted ${value.length - PrismaLogger.MAX_STRING_LENGTH} chars]`;
+        }
+
+        if (typeof Buffer !== "undefined" && Buffer.isBuffer(value)) {
+          return `[Buffer omitted: ${value.length} bytes]`;
+        }
+
+        if (Array.isArray(value) && value.length > PrismaLogger.MAX_ARRAY_ITEMS) {
+          return {
+            omitted: true,
+            reason: "array_too_large",
+            originalLength: value.length,
+            preview: value.slice(0, PrismaLogger.MAX_ARRAY_ITEMS),
+          };
+        }
+
+        if (value && typeof value === "object") {
+          if (visited.has(value)) {
+            return "[Circular]";
+          }
+          visited.add(value);
+
+          const entries = Object.entries(value as Record<string, unknown>);
+          if (entries.length > PrismaLogger.MAX_OBJECT_KEYS) {
+            return {
+              omitted: true,
+              reason: "object_too_large",
+              originalKeys: entries.length,
+              preview: Object.fromEntries(entries.slice(0, PrismaLogger.MAX_OBJECT_KEYS)),
+            };
+          }
+        }
+
+        return value;
+      });
+
+      if (!serialized) {
+        return JSON.stringify(null);
+      }
+
+      if (serialized.length <= PrismaLogger.MAX_METADATA_LENGTH) {
+        return serialized;
+      }
+
+      return JSON.stringify({
+        omitted: true,
+        reason: "metadata_too_large",
+        originalLength: serialized.length,
+        preview: serialized.slice(0, PrismaLogger.MAX_METADATA_LENGTH),
+      });
     } catch {
       return JSON.stringify({
         serializationError: "Failed to serialize metadata",

@@ -51,7 +51,7 @@ class PrismaBaileysStore implements BaileysStore {
 
   private async handleMessagesUpsert({ messages }: MessageUpsertEvent, logger = this.getLogger("hMsgUpsert")) {
     for (const message of messages) {
-      await upsertMessage({ logger, message, repository: this.messagesRepo });
+      await upsertMessage({ instance: this.instance, logger, message, repository: this.messagesRepo });
     }
   }
 

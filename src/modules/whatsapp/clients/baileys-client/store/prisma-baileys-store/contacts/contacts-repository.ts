@@ -93,6 +93,7 @@ class ContactsRepository {
         id: input.id,
         instance: this.instance,
         sessionId: this.sessionId,
+        lid: input.lid,
         phoneNumber: input.phoneNumber,
         name: input.name,
         notify: input.notify,
@@ -101,6 +102,7 @@ class ContactsRepository {
         status: input.status,
       },
       update: {
+        lid: input.lid,
         phoneNumber: input.phoneNumber,
         name: input.name,
         notify: input.notify,

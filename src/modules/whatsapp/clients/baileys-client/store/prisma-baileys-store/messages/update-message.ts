@@ -21,7 +21,11 @@ async function updateMessage({ update, logger, repository }: UpdateMessageDto) {
       return;
     }
 
+    logger.debug(existing.messageData, 'Existing message data');
+    logger.debug(update.update.message, 'Update message data');
+
     const newMessageData = { ...existing.messageData, ...update.update.message };
+    logger.debug(newMessageData, 'Merged message data');
 
     await repository.update(update.key.id, newMessageData);
     logger.info({ update, updateMsgData: newMessageData, }, `Message with ID ${update.key.id} updated successfully`);
