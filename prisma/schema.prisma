@@ -20,7 +20,7 @@ model Session {
 model BaileysAuth {
   sessionId String   @map("session_id")
   key       String   @map("key") @db.VarChar(255)
-  value     String   @map("value")
+  value     String   @map("value") @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -36,7 +36,7 @@ model RawGroup {
 
   id        String   @id
   name      String?  @db.VarChar(255)
-  groupData String   @map("group_data")
+  groupData String   @map("group_data") @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -50,8 +50,8 @@ model RawMessage {
   remoteJid   String   @map("remote_jid")
   instance    String
   timestamp   String   @db.VarChar(20)
-  keyData     String   @map("key_data")
-  messageData String   @map("message_data")
+  keyData     String   @map("key_data") @db.Text
+  messageData String   @map("message_data") @db.Text
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -146,7 +146,7 @@ model Log {
   operationName String?  @map("operation_name")
   correlationId String?  @map("correlation_id")
   message       String   @db.Text
-  metadata      String?
+  metadata      String?  @db.Text
   sessionId     String?  @map("session_id")
   instance      String?
   createdAt     DateTime @default(now()) @map("created_at")
