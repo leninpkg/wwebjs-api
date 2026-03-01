@@ -11,7 +11,7 @@ import BaileysWhatsappClient from '../baileys-whatsapp-client';
  * Tentativas: 1=5s, 2=15s, 3=30s, 4+=60s, 5=120s, 6=240s
  */
 function calculateReconnectDelay(attempts: number): number {
-  const delays = [5000, 15000, 30000, 60000, 120000, 240000]; // ms
+  const delays = [1000, 5000, 10000, 30000, 60000, 120000]; // ms
   return delays[Math.min(attempts, delays.length - 1)] || 4800000;
 }
 
@@ -45,6 +45,7 @@ async function handleConnectionUpdate(update: Partial<ConnectionState>, client: 
 
   const errStatusCode = (update.lastDisconnect?.error as Boom)?.output?.statusCode;
   const isRestartRequired = errStatusCode === DisconnectReason.restartRequired;
+  const isLoggedOut = errStatusCode === DisconnectReason.loggedOut;
 
   if (update.connection === "close" && isRestartRequired) {
     if (!client.startSocketReinitialization()) {
@@ -75,6 +76,32 @@ async function handleConnectionUpdate(update: Partial<ConnectionState>, client: 
     return;
   }
 
+  if (update.connection === "close" && isLoggedOut) {
+    if (!client.startSocketReinitialization()) {
+      logger.warn("Reinitialization already in progress, ignoring duplicate close event");
+      return;
+    }
+
+    try {
+      await client._auth.removeCredentials();
+      logger.info("Logged out detected, cleared auth state from storage");
+
+      client.unbindEvents();
+      client._sock.end(new Boom("Logged out", { statusCode: DisconnectReason.loggedOut }));
+
+      client.phone = "";
+      client.resetConnAttempts();
+
+      client._sock = await createBaileysSocket({ auth: client._auth, store: client._store, logger: client._logger });
+      client.bindEvents();
+      logger.info("Socket restarted after logout and is ready for new authentication");
+    } finally {
+      client.finishSocketReinitialization();
+    }
+
+    return;
+  }
+
   if (update.connection === "close" && !isRestartRequired) {
     if (!client.startSocketReinitialization()) {
       logger.warn("Reinitialization already in progress, ignoring duplicate close event");
@@ -82,17 +109,14 @@ async function handleConnectionUpdate(update: Partial<ConnectionState>, client: 
     }
 
     try {
-      client._auth.removeCredentials();
-      logger.info("Logged out, cleared auth state from storage");
-
       const delay = 5000;
-      logger.info(`Aguardando ${delay}ms antes de reinicializar após logout...`);
+      logger.info(`Aguardando ${delay}ms antes de reinicializar após desconexão...`);
       await sleep(delay);
 
       client.unbindEvents();
       client._sock = await createBaileysSocket({ auth: client._auth, store: client._store, logger: client._logger });
       client.bindEvents();
-      logger.info("Socket reinicializado após logout");
+      logger.info("Socket reinicializado após desconexão");
     } finally {
       client.finishSocketReinitialization();
     }

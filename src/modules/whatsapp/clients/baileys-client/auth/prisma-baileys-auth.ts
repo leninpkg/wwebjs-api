@@ -87,7 +87,7 @@ class PrismaBaileysAuth implements BaileysAuth {
 
   public async removeCredentials() {
     await this.clearData();
-    return await this.removeData("creds");
+    this._creds = initAuthCreds();
   }
 
   get creds() {
