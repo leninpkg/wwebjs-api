@@ -1,6 +1,6 @@
 import { BufferJSON, GroupMetadata } from "baileys";
 import { prisma } from "../../../../../../../prisma";
-import resolveJson from "../resolve-json";
+import reviveJSON from "../resolve-json";
 import { RawGroup } from "../../../types";
 
 class GroupsRepository {
@@ -13,7 +13,7 @@ class GroupsRepository {
     const foundGroup = await prisma.rawGroup.findUnique({ where: { id } });
     if (!foundGroup) return null;
 
-    const groupData = resolveJson<GroupMetadata>(foundGroup.groupData);
+    const groupData = reviveJSON<GroupMetadata>(foundGroup.groupData);
     return { ...foundGroup, groupData };
   }
 
@@ -50,7 +50,7 @@ class GroupsRepository {
     
     return groups.map(group => ({
       ...group,
-      groupData: resolveJson<GroupMetadata>(group.groupData),
+      groupData: reviveJSON<GroupMetadata>(group.groupData),
     }))
   }
 }

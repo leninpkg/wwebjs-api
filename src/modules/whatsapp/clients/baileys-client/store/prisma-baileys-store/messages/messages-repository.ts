@@ -1,6 +1,6 @@
 import { BufferJSON, proto } from "baileys";
 import { prisma } from "../../../../../../../prisma";
-import resolveJson from "../resolve-json";
+import reviveJSON from "../resolve-json";
 
 interface UpsertMessageDto {
   id: string;
@@ -53,8 +53,8 @@ class MessagesRepository {
     const message = await prisma.rawMessage.findUnique({ where: { id } });
     if (!message) return null;
 
-    const keyData = resolveJson<proto.IMessageKey>(message.keyData);
-    const messageData = resolveJson<proto.IMessage>(message.messageData);
+    const keyData = reviveJSON<proto.IMessageKey>(message.keyData);
+    const messageData = reviveJSON<proto.IMessage>(message.messageData);
 
     return { ...message, keyData, messageData };
   }
@@ -95,8 +95,8 @@ class MessagesRepository {
     });
 
     return messages.map(message => {
-      const keyData = resolveJson<proto.IMessageKey>(message.keyData);
-      const messageData = resolveJson<proto.IMessage>(message.messageData);
+      const keyData = reviveJSON<proto.IMessageKey>(message.keyData);
+      const messageData = reviveJSON<proto.IMessage>(message.messageData);
       return { ...message, keyData, messageData };
     });
   }

@@ -68,6 +68,7 @@ class ContactsRepository {
   }
 
   public async updateLidPn(lid: string, phoneNumber: string): Promise<void> {
+    console.log(`Updating LID-PN mapping: ${lid} <-> ${phoneNumber}`);
     await prisma.rawContact.updateMany({
       where: {
         sessionId: this.sessionId,
@@ -75,6 +76,8 @@ class ContactsRepository {
         OR: [
           { lid },
           { phoneNumber },
+          { id: lid + "@lid" },
+          { id: phoneNumber + "@s.whatsapp.net" },
         ]
       },
       data: {
