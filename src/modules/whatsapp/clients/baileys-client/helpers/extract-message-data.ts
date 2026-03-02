@@ -1,5 +1,6 @@
 import { proto } from "baileys";
 import InpulseMessage from "../../../inpulse-types";
+import { InpulseMessageType } from "../../../../../generated/prisma/enums";
 
 export interface MessageContent {
   type: InpulseMessage["type"];
@@ -21,7 +22,7 @@ export type ExtractedMessageData = MessageContent | FileMessageContent;
 export function extractMessageData(message: proto.IMessage): ExtractedMessageData {
   if (message?.extendedTextMessage?.text) {
     return {
-      type: "chat",
+      type: InpulseMessageType.text,
       body: message.extendedTextMessage.text,
       isFile: false,
     };
@@ -29,7 +30,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
 
   if (message?.conversation) {
     return {
-      type: "chat",
+      type: InpulseMessageType.text,
       body: message.conversation,
       isFile: false,
     };
@@ -37,7 +38,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
   if (message?.audioMessage) {
     return {
       body: message.conversation || "",
-      type: "audio",
+      type: InpulseMessageType.audio,
       fileName: "audio.ogg",
       fileType: message.audioMessage.mimetype || "audio/ogg; codecs=opus",
       fileSize: String(message.audioMessage.fileLength || 0),
@@ -47,7 +48,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
   if (message?.imageMessage) {
     return {
       body: message.imageMessage?.caption || "",
-      type: "image",
+      type: InpulseMessageType.image,
       fileName: "image.jpg",
       fileType: message.imageMessage.mimetype || "image/jpeg",
       fileSize: String(message.imageMessage.fileLength || 0),
@@ -57,7 +58,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
   if (message?.videoMessage) {
     return {
       body: message.videoMessage?.caption || "",
-      type: "video",
+      type: InpulseMessageType.video,
       fileName: "video.mp4",
       fileType: message.videoMessage.mimetype || "video/mp4",
       fileSize: String(message.videoMessage.fileLength || 0),
@@ -67,7 +68,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
   if (message?.documentMessage) {
     return {
       body: message.documentMessage?.caption || "",
-      type: "document",
+      type: InpulseMessageType.document,
       fileName: message.documentMessage?.fileName || "document",
       fileType: message.documentMessage.mimetype || "application/octet-stream",
       fileSize: String(message.documentMessage.fileLength || 0),
@@ -79,7 +80,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
     if (docMessage) {
       return {
         body: docMessage.caption || "",
-        type: "document",
+        type: InpulseMessageType.document,
         fileName: docMessage.fileName || "document",
         fileType: docMessage.mimetype || "application/octet-stream",
         fileSize: String(docMessage.fileLength || 0),
@@ -90,7 +91,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
   if (message?.stickerMessage) {
     return {
       body: "",
-      type: "sticker",
+      type: InpulseMessageType.sticker,
       fileName: "sticker.webp",
       fileType: message.stickerMessage.mimetype || "image/webp",
       fileSize: String(message.stickerMessage.fileLength || 0),
@@ -103,7 +104,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
     const contactName = contact.displayName || "Contato";
     const contactNumber = contact.vcard?.split("TEL:")[1]?.split("\n")[0] || "Sem número";
     return {
-      type: "contact",
+      type: InpulseMessageType.contact,
       body: `📇 Contato: ${contactName} (${contactNumber})`,
       isFile: false,
     };
@@ -114,7 +115,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
     const latitude = location.degreesLatitude;
     const longitude = location.degreesLongitude;
     return {
-      type: "location",
+      type: InpulseMessageType.location,
       body: `📍 Localização: https://maps.google.com/maps?q=${latitude},${longitude}`,
       isFile: false,
     };
@@ -122,15 +123,15 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
 
   if (message?.bcallMessage) {
     return {
-      type: "call",
-      body: "☎️ Chamada",
+      type: InpulseMessageType.text,
+      body: "☎️ Chamada recebida - Atender pelo aplicativo WhatsApp",
       isFile: false,
     };
   }
 
   if (message?.viewOnceMessage) {
     return {
-      type: "unsupported",
+      type: InpulseMessageType.text,
       body: "🔐 Mensagem com visualização única - Este tipo de mensagem só pode ser vista uma vez e não pode ser armazenada",
       isFile: false,
     };
@@ -138,7 +139,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
 
   if (message?.ephemeralMessage) {
     return {
-      type: "unsupported",
+      type: InpulseMessageType.unsupported,
       body: "⏰ Mensagem temporária - Este tipo de mensagem é configurada para desaparecer e não pode ser armazenada",
       isFile: false,
     };
@@ -149,7 +150,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
     const title = listMsg.title || "Lista";
     const description = listMsg.description || "Selecione uma opção";
     return {
-      type: "unsupported",
+      type: InpulseMessageType.unsupported,
       body: `📋 ${title}: ${description}\n⚠️ Este tipo de mensagem interativa (lista) deve ser visualizada no aplicativo WhatsApp`,
       isFile: false,
     };
@@ -159,7 +160,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
     const buttonsMsg = message.buttonsMessage;
     const buttonTexts = buttonsMsg.buttons?.map((b: any) => `• ${b.buttonText?.displayText || b.buttonId}`).join("\n") || "";
     return {
-      type: "unsupported",
+      type: InpulseMessageType.unsupported,
       body: `🔘 ${buttonsMsg.contentText}\n${buttonTexts}\n⚠️ Este tipo de mensagem interativa (botões) deve ser visualizada no aplicativo WhatsApp`,
       isFile: false,
     };
@@ -168,7 +169,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
   if (message?.templateMessage) {
     const templateMsg = message.templateMessage;
     return {
-      type: "unsupported",
+      type: InpulseMessageType.unsupported,
       body: `📧 Template: ${templateMsg.hydratedTemplate?.hydratedContentText || "Mensagem de template"}\n⚠️ Este tipo de mensagem de template deve ser visualizada no aplicativo WhatsApp`,
       isFile: false,
     };
@@ -178,7 +179,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
     const interactiveMsg = message.interactiveMessage;
     const body = interactiveMsg.body?.text || "Mensagem interativa";
     return {
-      type: "unsupported",
+      type: InpulseMessageType.unsupported,
       body: `💬 ${body}\n⚠️ Esta mensagem interativa deve ser visualizada no aplicativo WhatsApp`,
       isFile: false,
     };
@@ -186,7 +187,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
 
   if (message?.pollUpdateMessage) {
     return {
-      type: "unsupported",
+      type: InpulseMessageType.unsupported,
       body: "🗳️ Atualização de enquete - Esta mensagem deve ser visualizada no aplicativo WhatsApp",
       isFile: false,
     };
@@ -196,7 +197,7 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
     const poll = message.pollCreationMessage;
     const options = poll.options?.map((opt: any) => `• ${opt.optionName}`).join("\n") || "";
     return {
-      type: "unsupported",
+      type: InpulseMessageType.unsupported,
       body: `🗳️ Enquete: ${poll.name}\n${options}\n⚠️ Enquetes devem ser respondidas no aplicativo WhatsApp`,
       isFile: false,
     };
@@ -205,14 +206,14 @@ export function extractMessageData(message: proto.IMessage): ExtractedMessageDat
   if (message?.groupInviteMessage) {
     const groupInvite = message.groupInviteMessage;
     return {
-      type: "unsupported",
+      type: InpulseMessageType.unsupported,
       body: `👥 Convite para grupo: ${groupInvite.groupName || "Grupo"}\n⚠️ Convites de grupo devem ser aceitos no aplicativo WhatsApp`,
       isFile: false,
     };
   }
 
   return {
-    type: "unsupported",
+    type: InpulseMessageType.unsupported,
     body: "⚠️ Tipo de mensagem não suportado - Esta mensagem só pode ser visualizada no aplicativo WhatsApp",
     isFile: false,
   };

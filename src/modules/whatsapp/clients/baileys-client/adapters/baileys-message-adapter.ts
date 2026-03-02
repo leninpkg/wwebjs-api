@@ -1,14 +1,14 @@
 import { isJidGroup, proto, WAMessage, WAMessageKey } from "baileys";
 import onlyDigits from "../../../../../helpers/only-digits";
+import filesService from "../../../../files/files.service";
 import InpulseMessage, { InpulseMessageStatus } from "../../../inpulse-types";
 import { extractLidFromKey } from "../helpers/extract-lid-from-key";
-import { extractMessageData, FileMessageContent } from "../helpers/extract-message-data";
+import { extractMessageData } from "../helpers/extract-message-data";
 import { extractPhoneFromKey } from "../helpers/extract-phone-from-key";
-import saveMessageMedia from "../helpers/save-message-media";
 import BaileysStore from "../store/baileys-store";
 import { RawMessage } from "../types";
 
-type BaileysMessage = WAMessage | {
+export type BaileysMessage = WAMessage | {
   key: proto.IMessageKey;
   message: proto.IMessage;
   messageTimestamp: string;
@@ -90,13 +90,21 @@ class BaileysMessageAdapter {
     }
 
     if (isFile && "category" in this._message) {
-      const { fileName, fileType } = content as FileMessageContent;
-      const file = await saveMessageMedia(this._message, fileName, fileType, instance);
-      message.fileId = file.id;
-      message.fileSize = String(file.size);
+      const { media, success, } = await store.getMessageMedia(this._message);
+
+      if (success) {
+        const mediaData = await filesService.fetchFileMetadata(media.inpulseId);
+        message.fileId = media.inpulseId;
+        message.fileSize = String(mediaData.size);
+        message.fileName = mediaData.name;
+        message.fileType = mediaData.mime_type;
+        return message;
+      }
+
+      throw new Error("Message is marked as file but media could not be retrieved. Cannot download media.");
     }
+
     if (isFile && !("category" in this._message)) {
-      // Mensagem não é WAMessage, adicionar handler para baixar mídia de mensagens antigas
       throw new Error("Message is marked as file but does not have a category. Cannot download media.");
     }
 
