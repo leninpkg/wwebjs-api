@@ -1,0 +1,7 @@
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - baileys
+  - msgpackr-extract
+  - prisma
+  - protobufjs
+  - sharp
