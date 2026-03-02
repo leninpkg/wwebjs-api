@@ -37,7 +37,7 @@ export interface Message {
 export interface MessageMedia {
   id: string;
   messageId: string;
-  inpulseId: number | null;
+  inpulseId: number;
   createdAt: Date;
   updatedAt: Date | null;
 }

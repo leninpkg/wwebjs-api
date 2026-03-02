@@ -67,7 +67,7 @@ model RawMessage {
 model RawMessageFile {
   id        String   @id @default(nanoid())
   messageId String   @unique @map("message_id")
-  inpulseId Int?     @unique @map("inpulse_id")
+  inpulseId Int      @unique @map("inpulse_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -109,12 +109,13 @@ model InpulseMessage {
   timestamp   String               @db.VarChar(20)
   sentAt      DateTime             @map("sent_at")
   status      InpulseMessageStatus
-  fileId      String?              @map("file_id")
+  fileId      Int?                 @map("file_id")
   fileName    String?              @map("file_name") @db.Text
   fileType    String?              @map("file_type")
-  fileSize    Int?                 @map("file_size")
-  isForwarded Boolean              @map("is_forwarded")
-  isEdited    Boolean              @map("is_edited")
+  fileSize    String?                 @map("file_size")
+  isForwarded Boolean              @default(false) @map("is_forwarded")
+  isEdited    Boolean              @default(false) @map("is_edited")
+  clientId    Int                  @map("client_id")
 
   message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 

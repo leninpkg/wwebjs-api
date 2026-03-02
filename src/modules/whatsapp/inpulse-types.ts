@@ -1,4 +1,5 @@
 import { type File } from "@in.pulse-crm/sdk";
+import { InpulseMessageType } from "../../generated/prisma/enums";
 
 export type InpulseMessageStatus = "PENDING" | "SENT" | "RECEIVED" | "READ" | "DOWNLOADED" | "ERROR" | "REVOKED";
 
@@ -7,7 +8,7 @@ export default interface InpulseMessage {
   from: string;
   to: string;
   body: string;
-  type: string;
+  type: InpulseMessageType;
   timestamp: string;
   sentAt: Date;
   status: InpulseMessageStatus;
