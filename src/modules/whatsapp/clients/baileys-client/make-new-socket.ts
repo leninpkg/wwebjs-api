@@ -35,7 +35,7 @@ async function makeNewSocket(id: string, storage: DataClient) {
     },
     syncFullHistory,
     enableAutoSessionRecreation: true,
-    version
+    version: [2, 3000, 1033105955]
   });
 
   return socket;
