@@ -5,8 +5,10 @@ import BaileysWhatsappClient from "./modules/whatsapp/clients/baileys-client/bai
 import PrismaBaileysStore from "./modules/whatsapp/clients/baileys-client/store/prisma-baileys-store/prisma-baileys-store";
 import { PrismaLogger } from "./modules/whatsapp/clients/baileys-client/logger/prisma-logger";
 import PrismaBaileysAuth from "./modules/whatsapp/clients/baileys-client/auth/prisma-baileys-auth";
+import BaileysMessageAdapter from "./modules/whatsapp/clients/baileys-client/adapters/baileys-message-adapter";
+import { prisma } from "./prisma";
+import { InpulseMessageStatus } from "./generated/prisma/enums";
 
-// Handlers globais para erros não capturados
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise);
   console.error('Reason:', reason);
@@ -60,6 +62,32 @@ async function runApp() {
     clientId,
     sessionId,
     logger
+  });
+
+  store.on("message-upsert", async (event) => {
+    const message = new BaileysMessageAdapter(event.message);
+    const inpulseMsg = await message.toInpulseMessage({ clientId, clientPhone: wppClient.phone, instance, store });
+    await prisma.inpulseMessage.create({
+      data: {
+        from: inpulseMsg.from,
+        to: inpulseMsg.to,
+        type: inpulseMsg.type,
+        status: InpulseMessageStatus.RECEIVED,
+        timestamp: inpulseMsg.timestamp,
+        body: inpulseMsg.body,
+        fileId: inpulseMsg.fileId,
+        fileName: inpulseMsg.fileName,
+        fileSize: inpulseMsg.fileSize,
+        fileType: inpulseMsg.fileType,
+        messageId: event.messageId,
+        sentAt: inpulseMsg.sentAt,
+        isForwarded: inpulseMsg.isForwarded || false,
+        isEdited: false,
+        instance,
+        clientId,
+        sessionId
+      }
+    })
   });
 
   const api = new ExpressApi(wppClient, logger);

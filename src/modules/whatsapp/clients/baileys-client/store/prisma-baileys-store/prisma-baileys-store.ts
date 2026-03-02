@@ -18,6 +18,7 @@ import MessagesRepository from "./messages/messages-repository";
 import upsertMessage from "./messages/upsert-message";
 
 export interface MessageUpsertStoreEvent {
+  messageId: string;
   message: BaileysMessage;
 }
 
@@ -94,7 +95,7 @@ class PrismaBaileysStore implements BaileysStore {
         continue;
       }
 
-      this.emit("message-upsert", { message });
+      this.emit("message-upsert", { messageId: message.key.id, message });
     }
   }
 
