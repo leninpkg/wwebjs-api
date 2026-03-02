@@ -1,49 +1,47 @@
 import { BaileysEventEmitter, BaileysEventMap, Chat, Contact, GroupMetadata, proto, WAMessage, WAMessageKey } from "baileys";
 import { EventEmitter } from "events";
 import onlyDigits from "../../../../../../helpers/only-digits";
+import { BaileysMessage } from "../../adapters/baileys-message-adapter";
 import { extractLidFromKey } from "../../helpers/extract-lid-from-key";
 import { extractPhoneFromKey } from "../../helpers/extract-phone-from-key";
 import { PrismaLogger } from "../../logger/prisma-logger";
 import { MessageUpdateEvent, MessageUpsertEvent, RawContact, RawGroup, RawMessage } from "../../types";
 import BaileysStore, { GetMessageMediaResult, GetMessagesByChatOptions } from "../baileys-store";
-import MessageProcessingQueue from "../../../../../message-processing-queue";
-import { type MessageProcessingQueueOptions } from "../../../../../message-processing-queue";
 import ContactsRepository from "./contacts/contacts-repository";
 import updateContact from "./contacts/update-contact";
+import updateLidMapping from "./contacts/update-lid-mapping";
 import upsertContact from "./contacts/upsert-contact";
-import getMessageMedia from "./messages/get-message-media";
-import MessagesRepository from "./messages/messages-repository";
-import updateMessage from "./messages/update-message";
-import upsertMessage from "./messages/upsert-message";
 import GroupsRepository from "./groups/groups-repository";
 import updateGroup from "./groups/update-group";
-import updateLidMapping from "./contacts/update-lid-mapping";
+import getMessageMedia from "./messages/get-message-media";
+import MessagesRepository from "./messages/messages-repository";
+import upsertMessage from "./messages/upsert-message";
 
 export interface MessageUpsertStoreEvent {
-  messageId: string;
-  sessionId: string;
-  instance: string;
-  message: WAMessage;
+  message: BaileysMessage;
 }
 
-export interface MessageUpdateStoreEvent {
+export interface MessageUpdateStatusStoreEvent {
   messageId: string;
-  sessionId: string;
-  instance: string;
-  update: MessageUpdateEvent[number];
+  status: proto.WebMessageInfo.Status;
+}
+
+export interface MessageUpdateTextStoreEvent {
+  messageId: string;
+  newText: string;
 }
 
 type StoreEventMap = {
   "message-upsert": MessageUpsertStoreEvent;
-  "message-update": MessageUpdateStoreEvent;
-};
+  "message-update:status": MessageUpdateStatusStoreEvent;
+  "message-update:text": MessageUpdateTextStoreEvent;
+}
 
 type StoreEventName = keyof StoreEventMap;
 type StoreEventListener<T extends StoreEventName> = (payload: StoreEventMap[T]) => void;
 
 class PrismaBaileysStore implements BaileysStore {
   private readonly messagesRepo: MessagesRepository;
-  private readonly messageQueue: MessageProcessingQueue;
   private readonly contactsRepo: ContactsRepository;
   private readonly groupsRepo: GroupsRepository;
   private readonly emitterName = "WppStore";
@@ -53,40 +51,8 @@ class PrismaBaileysStore implements BaileysStore {
     private readonly instance: string,
     private readonly sessionId: string,
     private readonly logger: PrismaLogger,
-    queueOptions?: MessageProcessingQueueOptions
   ) {
     this.messagesRepo = new MessagesRepository(this.sessionId, this.instance);
-    
-    // Se não fornecer opções de queue, usa padrão mínimo com handlers stub
-    this.messageQueue = new MessageProcessingQueue(
-      queueOptions || {
-        sessionId: this.sessionId,
-        logger: {
-          error: (error: unknown, msg: string, emitter?: string, op?: string) => this.logger.error(error, msg, emitter, op),
-          warn: (error: unknown, msg: string, emitter?: string, op?: string) => this.logger.warn(error, msg, emitter, op),
-          info: (msg: string, emitter?: string, op?: string) => this.logger.info(msg, emitter, op),
-        },
-        backoffStrategy: {
-          getNextAttemptAt: (attempt: number) => {
-            const delays = [1000, 5000, 15000, 30000, 60000];
-            const index = Math.min(Math.max(attempt - 1, 0), delays.length - 1);
-            return new Date(Date.now() + delays[index]!);
-          },
-        },
-        processReceive: async (messageId: string) => {
-          const message = await this.messagesRepo.findById(messageId);
-          if (!message) {
-            throw new Error(`Message ${messageId} not found for RECEIVE processing`);
-          }
-        },
-        processEdit: async (messageId: string) => {
-          const message = await this.messagesRepo.findById(messageId);
-          if (!message) {
-            throw new Error(`Message ${messageId} not found for EDIT processing`);
-          }
-        },
-      }
-    );
     this.contactsRepo = new ContactsRepository(this.sessionId, this.instance);
     this.groupsRepo = new GroupsRepository(this.sessionId, this.instance);
   }
@@ -98,8 +64,6 @@ class PrismaBaileysStore implements BaileysStore {
   }
 
   public bind(ev: BaileysEventEmitter): void {
-    this.messageQueue.start();
-
     ev.on("messaging-history.set", this.handleHistorySet.bind(this));
     ev.on("contacts.upsert", this.handleContactsUpsert.bind(this));
     ev.on("contacts.update", this.handleContactsUpdate.bind(this));
@@ -118,6 +82,10 @@ class PrismaBaileysStore implements BaileysStore {
     this.storeEvents.off(event, listener as (...args: unknown[]) => void);
   }
 
+  private emit<T extends StoreEventName>(event: T, payload: StoreEventMap[T]): void {
+    this.storeEvents.emit(event, payload);
+  }
+
   private async handleMessagesUpsert({ messages }: MessageUpsertEvent, logger = this.getLogger("hMsgUpsert")) {
     for (const message of messages) {
       const wasUpserted = await upsertMessage({ instance: this.instance, logger, message, repository: this.messagesRepo });
@@ -126,34 +94,38 @@ class PrismaBaileysStore implements BaileysStore {
         continue;
       }
 
-      await this.messageQueue.enqueueReceive(message.key.id);
-
-      this.storeEvents.emit("message-upsert", {
-        messageId: message.key.id,
-        sessionId: this.sessionId,
-        instance: this.instance,
-        message,
-      } satisfies MessageUpsertStoreEvent);
+      this.emit("message-upsert", { message });
     }
   }
 
   private async handleMessagesUpdate(updates: MessageUpdateEvent) {
     const logger = this.getLogger("hMsgUpdate");
     for (const update of updates) {
-      const wasUpdated = await updateMessage({ logger, update, repository: this.messagesRepo });
-
-      if (!wasUpdated || !update.key.id) {
+      if (!update.key.id) {
+        logger.warn(update, `Received message update without message ID, skipping update.`);
         continue;
       }
 
-      await this.messageQueue.enqueueEdit(update.key.id);
+      if (update.update.status) {
+        logger.info(`Message ${update.key.id} status updated to ${update.update.status}`);
+        this.emit("message-update:status", {
+          messageId: update.key.id,
+          status: update.update.status,
+        });
+      }
 
-      this.storeEvents.emit("message-update", {
-        messageId: update.key.id,
-        sessionId: this.sessionId,
-        instance: this.instance,
-        update,
-      } satisfies MessageUpdateStoreEvent);
+      if (update.update.message?.protocolMessage?.type === proto.Message.ProtocolMessage.Type.MESSAGE_EDIT) {
+        const editedText = update.update.message.protocolMessage.editedMessage?.conversation
+          || update.update.message.protocolMessage.editedMessage?.extendedTextMessage?.text;
+
+        if (editedText) {
+          logger.info({ editedText }, `Message ${update.key.id} text updated`);
+          this.emit("message-update:text", {
+            messageId: update.key.id,
+            newText: editedText,
+          });
+        }
+      }
     }
   }
 
