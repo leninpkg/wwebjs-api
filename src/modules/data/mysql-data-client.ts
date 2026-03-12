@@ -20,6 +20,7 @@ type MySQLAuthState = Awaited<ReturnType<typeof useMySQLAuthState>>;
 class MySQLDataClient extends DataClient {
   private pool: Pool;
   private mysqlAuthStateMap: Map<string, MySQLAuthState> = new Map();
+  private mysqlAuthStateInitMap: Map<string, Promise<MySQLAuthState>> = new Map();
 
   constructor(
     private host: string,
@@ -39,18 +40,36 @@ class MySQLDataClient extends DataClient {
   }
 
   private async getMysqlAuthState(sessionId: string) {
-    if (!this.mysqlAuthStateMap.has(sessionId)) {
-      const mysqlAuthState = await useMySQLAuthState({
-        session: sessionId,
-        database: this.database,
-        host: this.host,
-        port: this.port,
-        user: this.user,
-        password: this.password,
-      });
-      this.mysqlAuthStateMap.set(sessionId, mysqlAuthState);
+    const cachedState = this.mysqlAuthStateMap.get(sessionId);
+    if (cachedState) {
+      return cachedState;
     }
-    return this.mysqlAuthStateMap.get(sessionId)!;
+
+    const pendingInit = this.mysqlAuthStateInitMap.get(sessionId);
+    if (pendingInit) {
+      return pendingInit;
+    }
+
+    const initPromise = useMySQLAuthState({
+      session: sessionId,
+      database: this.database,
+      host: this.host,
+      port: this.port,
+      user: this.user,
+      password: this.password,
+    })
+      .then((mysqlAuthState) => {
+        this.mysqlAuthStateMap.set(sessionId, mysqlAuthState);
+        this.mysqlAuthStateInitMap.delete(sessionId);
+        return mysqlAuthState;
+      })
+      .catch((error) => {
+        this.mysqlAuthStateInitMap.delete(sessionId);
+        throw error;
+      });
+
+    this.mysqlAuthStateInitMap.set(sessionId, initPromise);
+    return initPromise;
   }
 
   public async getSignalKeyStore(sessionId: string, logger?: ILogger) {
@@ -99,7 +118,7 @@ class MySQLDataClient extends DataClient {
 
   public async getMessage(sessionId: string, messageId: string): Promise<Message | null> {
     try {
-      const query = "SELECT * FROM messages WHERE id = ? AND session_id = ?";
+      const query = "SELECT * FROM messages WHERE message_id = ? AND session_id = ?";
       const [rows] = await this.pool.query<RowDataPacket[]>(query, [messageId, sessionId]);
 
       if (rows[0]) {
@@ -221,8 +240,14 @@ class MySQLDataClient extends DataClient {
   public async clearAuthState(sessionId: string) {
     const { clear, removeCreds } = await this.getMysqlAuthState(sessionId);
 
-    await clear();
-    await removeCreds();
+    try {
+      await clear();
+      await removeCreds();
+    } finally {
+      // Evita reaproveitar estado em memória após logout/clear.
+      this.mysqlAuthStateMap.delete(sessionId);
+      this.mysqlAuthStateInitMap.delete(sessionId);
+    }
   }
 
   public async getLastSyncAt(sessionId: string): Promise<Date | null> {

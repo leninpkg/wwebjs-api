@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-import makeWASocket, { Browsers, fetchLatestBaileysVersion, isJidBroadcast, isJidMetaAI, isJidNewsletter, isJidStatusBroadcast, makeCacheableSignalKeyStore } from "baileys";
+import makeWASocket, { Browsers, fetchLatestBaileysVersion, isJidBroadcast, isJidMetaAI, isJidNewsletter, isJidStatusBroadcast } from "baileys";
 import DataClient from "../../../data/data-client";
 import logger from "./logger";
 
@@ -11,13 +11,11 @@ async function makeNewSocket(id: string, storage: DataClient) {
 
   console.log(`Criando nova instância de socket para o cliente ${id}... syncFullHistory=${syncFullHistory}`);
 
-  const { version } = await fetchLatestBaileysVersion();
-
   const socket = makeWASocket({
     logger,
     auth: {
       creds: authState.creds,
-      keys: makeCacheableSignalKeyStore(signalStore, logger),
+      keys: signalStore,
     },
     browser: Browsers.windows("Google Chrome"),
     cachedGroupMetadata: async (jid) => storage.getGroupMetadata(id, jid),

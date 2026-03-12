@@ -117,10 +117,7 @@ async function handleConnectionUpdate({ update, client, logger }: ConnectionUpda
       logger.log("Socket reinicializado - aguardando geração de QR code");
     } else {
       // Outros tipos de desconexão
-      logger.log(`Unhandled disconnection. Status code: ${errStatusCode}. Clearing auth state...`);
-      
-      await client._storage.clearAuthState(client.sessionId);
-      logger.log("Auth state cleared");
+      logger.log(`Unhandled disconnection. Status code: ${errStatusCode}. Preserving auth state and retrying reconnect...`);
 
       const delay = 5000;
       logger.log(`Aguardando ${delay}ms antes de reinicializar...`);
