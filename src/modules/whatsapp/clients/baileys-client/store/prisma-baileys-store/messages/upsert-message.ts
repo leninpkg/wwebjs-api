@@ -21,7 +21,7 @@ async function upsertMessage({ instance, message, logger, repository }: UpsertMe
       return false;
     }
 
-    await repository.upsert({
+    await repository.insert({
       id: message.key.id!,
       timestamp: String(message.messageTimestamp),
       remoteJid: message.key.remoteJid!,

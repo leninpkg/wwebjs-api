@@ -1,13 +1,12 @@
 import "dotenv/config";
 import ExpressApi from "./api";
 import HttpWppEventEmitter from "./modules/events/emitter/http-emitter";
-import BaileysWhatsappClient from "./modules/whatsapp/clients/baileys-client/baileys-whatsapp-client";
-import PrismaBaileysStore from "./modules/whatsapp/clients/baileys-client/store/prisma-baileys-store/prisma-baileys-store";
-import { PrismaLogger } from "./modules/whatsapp/clients/baileys-client/logger/prisma-logger";
-import PrismaBaileysAuth from "./modules/whatsapp/clients/baileys-client/auth/prisma-baileys-auth";
+import messageReceive from "./modules/inpulse/message-receive";
 import BaileysMessageAdapter from "./modules/whatsapp/clients/baileys-client/adapters/baileys-message-adapter";
-import { prisma } from "./prisma";
-import { InpulseMessageStatus } from "./generated/prisma/enums";
+import PrismaBaileysAuth from "./modules/whatsapp/clients/baileys-client/auth/prisma-baileys-auth";
+import BaileysWhatsappClient from "./modules/whatsapp/clients/baileys-client/baileys-whatsapp-client";
+import { PrismaLogger } from "./modules/whatsapp/clients/baileys-client/logger/prisma-logger";
+import PrismaBaileysStore from "./modules/whatsapp/clients/baileys-client/store/prisma-baileys-store/prisma-baileys-store";
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise);
@@ -67,26 +66,11 @@ async function runApp() {
   store.on("message-upsert", async (event) => {
     const message = new BaileysMessageAdapter(event.message);
     const inpulseMsg = await message.toInpulseMessage({ clientId, clientPhone: wppClient.phone, instance, store });
-    await prisma.inpulseMessage.create({
-      data: {
-        from: inpulseMsg.from,
-        to: inpulseMsg.to,
-        type: inpulseMsg.type,
-        status: InpulseMessageStatus.RECEIVED,
-        timestamp: inpulseMsg.timestamp,
-        body: inpulseMsg.body,
-        fileId: inpulseMsg.fileId,
-        fileName: inpulseMsg.fileName,
-        fileSize: inpulseMsg.fileSize,
-        fileType: inpulseMsg.fileType,
-        messageId: event.messageId,
-        sentAt: inpulseMsg.sentAt,
-        isForwarded: inpulseMsg.isForwarded || false,
-        isEdited: false,
-        instance,
-        clientId,
-        sessionId
-      }
+    await messageReceive({
+      emitter: eventEmitter,
+      messageId: event.messageId,
+      message: inpulseMsg,
+      logger,
     })
   });
 

@@ -2,7 +2,7 @@ import { BufferJSON, proto } from "baileys";
 import { prisma } from "../../../../../../../prisma";
 import reviveJSON from "../resolve-json";
 
-interface UpsertMessageDto {
+interface InsertMessageDto {
   id: string;
   timestamp: string;
   remoteJid: string;
@@ -21,13 +21,12 @@ class MessagesRepository {
     private readonly instance: string,
   ) { }
 
-  public async upsert(message: UpsertMessageDto): Promise<void> {
+  public async insert(message: InsertMessageDto): Promise<void> {
     const keyData = JSON.stringify(message.keyData, BufferJSON.replacer);
     const messageData = JSON.stringify(message.messageData, BufferJSON.replacer);
 
-    await prisma.rawMessage.upsert({
-      where: { id: message.id },
-      create: {
+    await prisma.rawMessage.create({
+      data: {
         id: message.id,
         instance: this.instance,
         timestamp: message.timestamp,
@@ -36,7 +35,6 @@ class MessagesRepository {
         keyData,
         messageData,
       },
-      update: { keyData, messageData },
     });
   }
 

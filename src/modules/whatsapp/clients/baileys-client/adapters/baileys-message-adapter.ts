@@ -86,6 +86,7 @@ class BaileysMessageAdapter {
       authorName: await this.getMessageContactName({ key, store }),
       timestamp: String(sentAt.getTime()),
       sentAt: sentAt,
+      quotedId: this.getQuotedMessageId(),
       ...content,
     }
 
@@ -198,6 +199,17 @@ class BaileysMessageAdapter {
 
     return new Date(timestampMs);
   }
-}
 
+  private getQuotedMessageId(): string | null {
+    if (!this._message.message) {
+      return null;
+    }
+
+    const contextInfo = this._message.message.extendedTextMessage?.contextInfo;
+    if (contextInfo?.quotedMessage) {
+      return contextInfo.stanzaId || null;
+    }
+    return null;
+  }
+}
 export default BaileysMessageAdapter;

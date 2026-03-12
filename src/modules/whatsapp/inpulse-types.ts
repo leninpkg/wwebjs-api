@@ -12,7 +12,7 @@ export default interface InpulseMessage {
   timestamp: string;
   sentAt: Date;
   status: InpulseMessageStatus;
-  quotedId?: null | number;
+  quotedId?: null | string;
   chatId?: null | number;
   contactId?: null | number;
   userId?: number;
@@ -28,7 +28,7 @@ export default interface InpulseMessage {
   isGroup: boolean;
   authorName?: null | string;
   groupId?: null | string;
-  clientId: number | null;
+  clientId: number;
 }
 
 interface CoreSendMessageRequest {

@@ -14,7 +14,7 @@ model Session {
   description String?
   createdAt   DateTime        @default(now()) @map("created_at")
 
-  @@map("sessions")
+  @@map("sessions") 
 }
 
 model BaileysAuth {
@@ -55,7 +55,6 @@ model RawMessage {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  inpulseMessage      InpulseMessage?
   messageSyncStatuses MessageProcessingStatus[]
   file                RawMessageFile?
 
@@ -97,35 +96,6 @@ model RawContact {
   @@map("raw_contacts")
 }
 
-model InpulseMessage {
-  messageId   String               @map("message_id")
-  sessionId   String               @map("session_id")
-  instance    String               @map("instance")
-  from        String
-  to          String
-  type        InpulseMessageType
-  quotedId    String?              @map("quoted_id")
-  body        String?              @db.Text
-  timestamp   String               @db.VarChar(20)
-  sentAt      DateTime             @map("sent_at")
-  status      InpulseMessageStatus
-  fileId      Int?                 @map("file_id")
-  fileName    String?              @map("file_name") @db.Text
-  fileType    String?              @map("file_type")
-  fileSize    String?                 @map("file_size")
-  isForwarded Boolean              @default(false) @map("is_forwarded")
-  isEdited    Boolean              @default(false) @map("is_edited")
-  clientId    Int                  @map("client_id")
-
-  message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-
-  @@unique([messageId], name: "uq_inpulse_messages_message_id")
-  @@index([instance], name: "idx_inpulse_messages_instance")
-  @@index([from], name: "idx_inpulse_messages_from")
-  @@index([to], name: "idx_inpulse_messages_to")
-  @@map("inpulse_messages")
-}
-
 model MessageProcessingStatus {
   id             String                 @id @default(nanoid())
   messageId      String                 @map("message_id")
@@ -139,7 +109,6 @@ model MessageProcessingStatus {
   lastError      String?                @map("last_error") @db.Text
   createdAt      DateTime               @default(now()) @map("created_at")
   updatedAt      DateTime               @updatedAt @map("updated_at")
-
   message RawMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, processingType], name: "uq_message_processing_status_message_id_type")
