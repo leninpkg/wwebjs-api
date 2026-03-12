@@ -1,4 +1,4 @@
-import makeWASocket, { type Contact, MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
+import makeWASocket, { type Contact, type GroupMetadata, MessageUpsertType, WAMessage, WAMessageUpdate, type ConnectionState } from "baileys";
 import Bottleneck from "bottleneck";
 import "dotenv/config";
 import ProcessingLogger from "../../../../utils/processing-logger";
@@ -15,6 +15,8 @@ import handleMessageUpsert from "./handle-message-upsert";
 import handleSendMessage from "./handle-send-message";
 import makeNewSocket from "./make-new-socket";
 import handleContactsUpsert from "./handle-contacts-upsert";
+import handleGroupsUpsert from "./handle-groups-upsert";
+import handleGroupsUpdate from "./handle-groups-update";
 
 class BaileysWhatsappClient implements WhatsappClient {
   public _phone: string = "";
@@ -73,6 +75,8 @@ class BaileysWhatsappClient implements WhatsappClient {
     this._sock.ev.on("messages.update", this.onMessagesUpdate.bind(this));
     this._sock.ev.on("messaging-history.set", this.onHistorySet.bind(this));
     this._sock.ev.on("contacts.upsert", this.onContactsUpsert.bind(this));
+    this._sock.ev.on("groups.upsert", this.onGroupsUpsert.bind(this));
+    this._sock.ev.on("groups.update", this.onGroupsUpdate.bind(this));
   }
 
   private getLogger(processName: string, processId: string, input: unknown, debug: boolean = false): ProcessingLogger {
@@ -84,6 +88,13 @@ class BaileysWhatsappClient implements WhatsappClient {
     const logger = this.getLogger("Connection Update", processId, update);
     try {
       await handleConnectionUpdate({ update, client: this, logger });
+
+      // Ao conectar com sucesso, sincronizar grupos do WhatsApp para o cache em banco
+      if (update.connection === "open") {
+        this.syncGroupsToCache().catch((err) => {
+          console.error(`[Groups ${this.sessionId}] Error syncing groups on connection open:`, err);
+        });
+      }
     } catch (error) {
       logger.failed(error);
     }
@@ -126,6 +137,42 @@ class BaileysWhatsappClient implements WhatsappClient {
    */
   private async onContactsUpsert(contacts: Contact[]) {
     handleContactsUpsert({ client: this, contacts });
+  }
+
+  /**
+   * Captura o evento groups.upsert da Baileys para salvar metadados de grupos novos no banco.
+   */
+  private async onGroupsUpsert(groups: GroupMetadata[]) {
+    handleGroupsUpsert({ client: this, groups });
+  }
+
+  /**
+   * Captura o evento groups.update da Baileys para atualizar metadados de grupos existentes no banco.
+   */
+  private async onGroupsUpdate(updates: Partial<GroupMetadata>[]) {
+    handleGroupsUpdate({ client: this, updates });
+  }
+
+  /**
+   * Sincroniza todos os grupos do WhatsApp para o cache em banco.
+   * Chamado uma vez ao conectar com sucesso.
+   * Usa groupFetchAllParticipating() da Baileys para obter todos os grupos.
+   */
+  private async syncGroupsToCache(): Promise<void> {
+    try {
+      console.log(`[Groups ${this.sessionId}] Syncing all groups to cache...`);
+      const groups = await this._sock.groupFetchAllParticipating();
+      const groupList = Object.values(groups);
+
+      for (const group of groupList) {
+        if (!group.id) continue;
+        await this._storage.saveGroupMetadata(this.sessionId, group.id, group);
+      }
+
+      console.log(`[Groups ${this.sessionId}] Synced ${groupList.length} groups to cache`);
+    } catch (error) {
+      console.error(`[Groups ${this.sessionId}] Error syncing groups to cache:`, error);
+    }
   }
 
   public isValidWhatsapp(phone: string): Promise<boolean> {
@@ -187,6 +234,39 @@ class BaileysWhatsappClient implements WhatsappClient {
       logger.failed(`Failed to get avatar URL: ${error}`);
       return null;
     }
+  }
+
+  public async getGroups(): Promise<Array<{ id: string; name: string }>> {
+    // Retorna grupos do cache em banco, sem consultar a API do WhatsApp
+    const groups = await this._storage.getAllGroupMetadata(this.sessionId);
+    return groups.map((g) => ({
+      id: g.jid.replace("@g.us", ""),
+      name: g.data.subject || g.jid.replace("@g.us", ""),
+    }));
+  }
+
+  public async getTextWithMentions(text: string, mentions?: any): Promise<{ text: string; mentions: string[] }> {
+    if (!mentions?.length) {
+      return { text, mentions: [] };
+    }
+
+    // Processa menções adicionando @ antes de cada nome
+    const mentionIds: string[] = [];
+    let processedText = text;
+
+    mentions.forEach((mention: any) => {
+      const jid = mention.phone ? `${mention.phone}@s.whatsapp.net` : mention.id;
+      if (jid) {
+        mentionIds.push(jid);
+      }
+    });
+
+    // Adiciona menções ao final do texto se não estiverem presentes
+    if (mentionIds.length > 0 && !text.endsWith("@")) {
+      processedText = `${text} ${mentions.map((m: any) => `@${m.name || m.phone}`).join(" ")}`;
+    }
+
+    return { text: processedText, mentions: mentionIds };
   }
 
   get phone(): string {

@@ -3,7 +3,7 @@ import { AnyMediaMessageContent, AnyRegularMessageContent, jidNormalizedUser } f
 import { phoneToAltBr } from "../../../../utils/phone.utils";
 import ProcessingLogger from "../../../../utils/processing-logger";
 import { calculateTypingDuration, sleep } from "../../../../utils/humanize.utils";
-import { SendFileOptions, SendMessageOptions } from "../../types";
+import { Mentions, SendFileOptions, SendMessageOptions } from "../../types";
 import BaileysWhatsappClient from "./baileys-whatsapp-client";
 import parseMessage from "./parse-message";
 import filesService from "../../../files/files.service";
@@ -48,6 +48,21 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
     } catch (error) {
       logger.log(`Erro ao preparar opções de mensagem: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
+    }
+
+    // Processar menções
+    if (options.mentions?.length) {
+      const { mentionJids, mentionsText } = processMentions(options.mentions, logger);
+      if (mentionJids.length > 0) {
+        (messageOptions as any).mentions = mentionJids;
+        // Inserir texto das menções no corpo/caption da mensagem
+        if ("text" in messageOptions && messageOptions.text) {
+          (messageOptions as any).text = appendMentionsText(messageOptions.text, mentionsText);
+        } else if ("caption" in messageOptions && (messageOptions as any).caption) {
+          (messageOptions as any).caption = appendMentionsText((messageOptions as any).caption as string, mentionsText);
+        }
+        logger.debug(`Menções adicionadas: ${mentionJids.length} JIDs`, { mentionJids });
+      }
     }
 
     // Simular digitação para humanizar a interação
@@ -118,6 +133,40 @@ async function handleSendMessage({ client, options, isGroup, logger }: SendMessa
     }
     throw err;
   }
+}
+
+/**
+ * Processa a lista de menções, normalizando phones para JIDs do Baileys
+ * e gerando o texto formatado com @nome.
+ */
+function processMentions(mentions: Mentions, logger: ProcessingLogger): { mentionJids: string[]; mentionsText: string } {
+  const mentionJids: string[] = [];
+
+  for (const mention of mentions) {
+    const phone = mention.phone?.replace(/\D/g, "");
+    if (!phone) {
+      logger.debug(`Telefone inválido em menção: ${JSON.stringify(mention)}`);
+      continue;
+    }
+    const jid = jidNormalizedUser(`${phone}@s.whatsapp.net`);
+    if (jid) {
+      mentionJids.push(jid);
+    }
+  }
+
+  const mentionsText = mentions.map((m) => `@${m.name || m.phone}`).join(" ");
+  return { mentionJids, mentionsText };
+}
+
+/**
+ * Insere o texto de menções no texto da mensagem.
+ * Se o texto termina em @, substitui; senão, acrescenta ao final.
+ */
+function appendMentionsText(text: string, mentionsText: string): string {
+  if (/@\s*$/.test(text)) {
+    return text.replace(/@\s*$/, mentionsText);
+  }
+  return `${text} ${mentionsText}`;
 }
 
 async function getMessageOptions(options: SendMessageOptions, logger: ProcessingLogger): Promise<AnyRegularMessageContent> {

@@ -116,6 +116,36 @@ class MySQLDataClient extends DataClient {
     }
   }
 
+  public async getAllGroupMetadata(sessionId: string): Promise<Array<{ jid: string; data: GroupMetadata }>> {
+    try {
+      const query = "SELECT jid, data FROM group_metadata WHERE session_id = ?";
+      const [rows] = await this.pool.query<RowDataPacket[]>(query, [sessionId]);
+
+      return rows.map((row) => ({
+        jid: row["jid"] as string,
+        data: JSON.parse(row["data"]) as GroupMetadata,
+      }));
+    } catch (error: any) {
+      if (error.code === 'ER_NO_SUCH_TABLE') {
+        Logger.info("Table 'group_metadata' does not exist. Consider running migration 003_add_group_metadata_table.sql");
+        return [];
+      }
+      Logger.error("Error fetching all group metadata from MySQL", error);
+      return [];
+    }
+  }
+
+  public async deleteGroupMetadata(sessionId: string, jid: string): Promise<void> {
+    try {
+      const query = "DELETE FROM group_metadata WHERE session_id = ? AND jid = ?";
+      await this.pool.query(query, [sessionId, jid]);
+    } catch (error: any) {
+      if (error.code !== 'ER_NO_SUCH_TABLE') {
+        Logger.error("Error deleting group metadata from MySQL", error);
+      }
+    }
+  }
+
   public async getMessage(sessionId: string, messageId: string): Promise<Message | null> {
     try {
       const query = "SELECT * FROM messages WHERE message_id = ? AND session_id = ?";

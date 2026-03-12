@@ -15,6 +15,8 @@ class ExpressApi {
     this.router.get("/health", this.healtCheck);
     this.router.post("/send-message", this.sendMessage.bind(this));
     this.router.post("/edit-message", this.editMessage.bind(this));
+    this.router.get("/groups", this.getGroups.bind(this));
+    this.router.post("/get-text-with-mentions", this.getTextWithMentions.bind(this));
 
     this.app.use(express.json());
     this.app.use("/api", this.router);
@@ -78,6 +80,46 @@ class ExpressApi {
       res.status(200).send(result);
     } catch (error) {
       console.error("[API] Error editing message:", error);
+      console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
+      res.status(500).json({
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+        details: error instanceof Error ? error.stack : undefined
+      });
+    }
+  }
+
+  private async getGroups(_req: Request, res: Response): Promise<void> {
+    try {
+      const groups = await this.client.getGroups();
+      res.status(200).send(groups);
+    } catch (error) {
+      console.error("[API] Error fetching groups:", error);
+      res.status(500).json({
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+        details: error instanceof Error ? error.stack : undefined
+      });
+    }
+  }
+
+  private async getTextWithMentions(req: Request, res: Response): Promise<void> {
+    try {
+      const { text, mentions } = req.body;
+
+      // Verifica se o client implementa getTextWithMentions
+      if (typeof (this.client as any).getTextWithMentions !== "function") {
+        res.status(501).json({
+          error: "Not implemented",
+          message: "This client does not support text with mentions processing"
+        });
+        return;
+      }
+
+      const result = await (this.client as any).getTextWithMentions(text, mentions);
+      res.status(200).send(result);
+    } catch (error) {
+      console.error("[API] Error processing text with mentions:", error);
       console.error("[API] Request body:", JSON.stringify(req.body, null, 2));
       res.status(500).json({
         error: "Internal server error",
