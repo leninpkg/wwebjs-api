@@ -83,7 +83,9 @@ class MySQLDataClient extends DataClient {
       const [rows] = await this.pool.query<RowDataPacket[]>(query, [jid, sessionId]);
 
       if (rows[0]) {
-        return JSON.parse(rows[0]["data"]) as GroupMetadata;
+        const raw = rows[0]["data"] as string;
+        const json = Buffer.from(raw, "base64").toString("utf-8");
+        return JSON.parse(json) as GroupMetadata;
       }
 
       return undefined;
@@ -107,7 +109,8 @@ class MySQLDataClient extends DataClient {
           data = VALUES(data),
           updated_at = NOW()
       `;
-      await this.pool.query(query, [sessionId, jid, JSON.stringify(metadata)]);
+      const encoded = Buffer.from(JSON.stringify(metadata), "utf-8").toString("base64");
+      await this.pool.query(query, [sessionId, jid, encoded]);
     } catch (error: any) {
       // Se a tabela não existe, ignora silenciosamente
       if (error.code !== 'ER_NO_SUCH_TABLE') {
@@ -121,10 +124,14 @@ class MySQLDataClient extends DataClient {
       const query = "SELECT jid, data FROM group_metadata WHERE session_id = ?";
       const [rows] = await this.pool.query<RowDataPacket[]>(query, [sessionId]);
 
-      return rows.map((row) => ({
-        jid: row["jid"] as string,
-        data: JSON.parse(row["data"]) as GroupMetadata,
-      }));
+      return rows.map((row) => {
+        const raw = row["data"] as string;
+        const json = Buffer.from(raw, "base64").toString("utf-8");
+        return {
+          jid: row["jid"] as string,
+          data: JSON.parse(json) as GroupMetadata,
+        };
+      });
     } catch (error: any) {
       if (error.code === 'ER_NO_SUCH_TABLE') {
         Logger.info("Table 'group_metadata' does not exist. Consider running migration 003_add_group_metadata_table.sql");
